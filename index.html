@@ -128,10 +128,157 @@ WHERE is_active = 1;</pre>
     </div>
   </div>
 
+  <div class="card">
+    <h3>2.2 — The restaurant analogy</h3>
+    <p class="muted">The cleanest way to feel the difference.</p>
+    <div class="analogy">
+      <div class="analogy-side">
+        <div class="analogy-emoji">🍳</div>
+        <div class="analogy-title">Cooking at home</div>
+        <div class="analogy-sub">Imperative · Python, Java</div>
+        <ul>
+          <li>Get the pan</li>
+          <li>Turn on the gas</li>
+          <li>Add oil</li>
+          <li>Chop onions, stir</li>
+          <li>Watch the heat</li>
+        </ul>
+        <p class="muted">You control every step.</p>
+      </div>
+      <div class="analogy-vs">vs</div>
+      <div class="analogy-side analogy-win">
+        <div class="analogy-emoji">🍕</div>
+        <div class="analogy-title">Ordering at a restaurant</div>
+        <div class="analogy-sub">Declarative · SQL</div>
+        <ul>
+          <li>"I want a pepperoni pizza."</li>
+        </ul>
+        <p class="muted">You describe the result. The kitchen handles the rest.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="lesson-foot">
     <label class="complete-check">
       <input type="checkbox" class="lesson-done" data-lesson="lesson-2">
       <span>Mark lesson 2 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON: SEQUEL → SQL HISTORY ============ -->
+<section class="lesson" id="lesson-sequel" data-title="SEQUEL to SQL history">
+  <header class="lesson-head">
+    <div class="lesson-tag">History</div>
+    <h1>SEQUEL → SQL: the name story</h1>
+    <p class="lede">Why some engineers say "sequel" and others say S-Q-L. Both are right. Here's the backstory.</p>
+  </header>
+
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-node">
+        <div class="tl-dot">1</div>
+        <div class="tl-year">1974</div>
+        <div class="tl-title">IBM builds SEQUEL</div>
+        <div class="tl-body">Researchers at IBM create a language called <strong>SEQUEL</strong> — Structured English Query Language — for their experimental System R database.</div>
+      </div>
+      <div class="tl-node">
+        <div class="tl-dot">2</div>
+        <div class="tl-year">~1977</div>
+        <div class="tl-title">Trademark conflict</div>
+        <div class="tl-body">An aircraft company already owned the trademark <strong>"Sequel"</strong>. IBM had to drop the name to avoid legal trouble.</div>
+      </div>
+      <div class="tl-node">
+        <div class="tl-dot">3</div>
+        <div class="tl-year">Late 1970s</div>
+        <div class="tl-title">Renamed to SQL</div>
+        <div class="tl-body">IBM shortened it to <strong>SQL</strong> — Structured Query Language. Same language. But the old pronunciation stuck.</div>
+      </div>
+      <div class="tl-node">
+        <div class="tl-dot">4</div>
+        <div class="tl-year">Today</div>
+        <div class="tl-title">Both pronunciations win</div>
+        <div class="tl-body">Engineers at Google, Amazon, every major tech company still say "sequel". Some say S-Q-L. Both are correct.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-sequel">
+      <span>Mark complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON: DATABASE INTERNALS ============ -->
+<section class="lesson" id="lesson-internals" data-title="Inside a database">
+  <header class="lesson-head">
+    <div class="lesson-tag">Internals · Game mode</div>
+    <h1>Inside a database: pages, indexes, search</h1>
+    <p class="lede">Databases don't read every row to find one. They're built like a book — with a table of contents called an index.</p>
+  </header>
+
+  <div class="card">
+    <h3>The four pieces</h3>
+    <div class="parts-grid">
+      <div class="part-card">
+        <div class="part-icon">📄</div>
+        <div class="part-name">Pages</div>
+        <div class="part-desc">Rows live in fixed-size pages (~8 KB). The database reads and writes one page at a time, not one row.</div>
+      </div>
+      <div class="part-card">
+        <div class="part-icon">⚡</div>
+        <div class="part-name">Buffer cache</div>
+        <div class="part-desc">Hot pages live in RAM. Disk reads are slow. Cache avoids them when you re-ask the same question.</div>
+      </div>
+      <div class="part-card">
+        <div class="part-icon">🌳</div>
+        <div class="part-name">B-tree index</div>
+        <div class="part-desc">Like a book's index. Jump straight to the right page in a few hops. Most common database index.</div>
+      </div>
+      <div class="part-card">
+        <div class="part-icon">🎯</div>
+        <div class="part-name">Hash lookup</div>
+        <div class="part-desc">When you know the exact ID, hashing finds it in one step. Even faster than a B-tree.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🎮 Find Aisha Khan</h3>
+    <p class="muted">She's in row 37 of this 50-row table. Pick a search strategy and watch the difference.</p>
+
+    <div class="search-grid" id="search-grid"></div>
+
+    <div class="search-stats">
+      <div class="stat-card">
+        <div class="stat-label">Steps</div>
+        <div class="stat-num" id="step-count">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Time</div>
+        <div class="stat-num" id="time-count">0ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Strategy</div>
+        <div class="stat-num" id="strategy-name" style="font-size: 13px;">—</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="run-scan">🔍 Full scan</button>
+      <button class="btn btn-primary" id="run-index">🌳 Use B-tree</button>
+      <button class="btn" id="reset-search">↻ Reset</button>
+    </div>
+
+    <div id="search-result" class="search-result"></div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-internals">
+      <span>Mark complete</span>
     </label>
   </div>
 </section>
@@ -177,31 +324,97 @@ WHERE is_active = 1;</pre>
   </div>
 </section>
 
-<!-- ============ LESSON 4 ============ -->
-<section class="lesson" id="lesson-4" data-title="Try a query">
+<!-- ============ LESSON 4: QUERY BUILDER GAME ============ -->
+<section class="lesson" id="lesson-4" data-title="Query builder game">
   <header class="lesson-head">
-    <div class="lesson-tag">Lesson 4</div>
-    <h1>Try a query</h1>
-    <p class="lede">Pick filters. The SQL writes itself. The result updates live.</p>
+    <div class="lesson-tag">Lesson 4 · Game mode</div>
+    <h1>Build the query</h1>
+    <p class="lede">Drag the right chip into each slot. Wrong piece bounces back. 5 puzzles. Real SQL.</p>
   </header>
 
-  <div class="card">
-    <h3>4.1 — Mini playground</h3>
-    <div class="filter-bar" id="fbar">
-      <button class="fbtn on" data-f="all">All students</button>
-      <button class="fbtn" data-f="active">is_active = 1</button>
-      <button class="fbtn" data-f="mumbai">city = 'Mumbai'</button>
-      <button class="fbtn" data-f="paid">fees_paid = 1</button>
-      <button class="fbtn" data-f="active_unpaid">active AND NOT paid</button>
+  <div class="card puzzle-card">
+    <div class="puzzle-meta">
+      <span class="puzzle-num">Puzzle <span id="pn">1</span> / 5</span>
+      <span class="puzzle-score">Score <span id="pscore">0</span></span>
     </div>
-    <pre class="code" id="sqlq">SELECT * FROM students;</pre>
-    <div id="rtbl"></div>
+
+    <div class="puzzle-goal" id="pgoal">
+      <span class="goal-label">Goal</span>
+      <span id="goal-text">Loading…</span>
+    </div>
+
+    <div class="query-line" id="qline"></div>
+
+    <div class="palette-label">Drag from here ↓</div>
+    <div class="chip-palette" id="palette"></div>
+
+    <div class="puzzle-buttons">
+      <button class="btn btn-primary" id="run-q" disabled>▶ Run query</button>
+      <button class="btn" id="reset-q">↻ Reset</button>
+      <button class="btn" id="hint-q">💡 Hint</button>
+      <button class="btn btn-primary" id="next-q" style="display:none">Next puzzle →</button>
+    </div>
+
+    <div id="hint-box" class="hint-box"></div>
+    <div id="puzzle-result" class="puzzle-result"></div>
   </div>
 
   <div class="lesson-foot">
     <label class="complete-check">
       <input type="checkbox" class="lesson-done" data-lesson="lesson-4">
       <span>Mark lesson 4 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON: RELATIONAL vs NoSQL ============ -->
+<section class="lesson" id="lesson-relational" data-title="Relational vs NoSQL">
+  <header class="lesson-head">
+    <div class="lesson-tag">Choices · Mini-game</div>
+    <h1>Relational vs NoSQL</h1>
+    <p class="lede">Not all databases use tables. Different tools for different jobs. Neither is "better" — they solve different problems.</p>
+  </header>
+
+  <div class="card">
+    <div class="oltp-grid">
+      <div class="oltp-col">
+        <div class="oltp-acro">Relational</div>
+        <div class="oltp-full">Strict tables, rows, columns, relationships</div>
+        <div class="oltp-tag">structure &amp; correctness</div>
+        <ul>
+          <li>Tables connected via shared identifiers (keys)</li>
+          <li>Strict schema — every row must fit</li>
+          <li>Strong ACID guarantees</li>
+          <li><em>Engines:</em> Postgres, MySQL, Oracle, SQL Server</li>
+          <li><em>Best for:</em> banking, accounting, anywhere data must be 100% accurate</li>
+        </ul>
+      </div>
+      <div class="oltp-col">
+        <div class="oltp-acro">NoSQL</div>
+        <div class="oltp-full">JSON docs, key-value pairs, graphs</div>
+        <div class="oltp-tag">speed &amp; flexibility</div>
+        <ul>
+          <li>No strict schema — flexible structure</li>
+          <li>Related data often stored together (less joining)</li>
+          <li>Optimized for fast reads at scale</li>
+          <li><em>Engines:</em> MongoDB, Cassandra, Redis, Neo4j</li>
+          <li><em>Best for:</em> social feeds, real-time chat, caches, big analytics</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🎮 Pick the right tool</h3>
+    <p class="muted">For each use case — which type fits better? Tap an option, see why.</p>
+    <div id="use-cases"></div>
+    <div id="uc-score" class="uc-score"></div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-relational">
+      <span>Mark complete</span>
     </label>
   </div>
 </section>
@@ -336,10 +549,85 @@ LOG: COMMIT</pre>
     </div>
   </div>
 
+  <div class="card">
+    <h3>Side by side</h3>
+    <table class="comparison-tbl">
+      <thead>
+        <tr><th>Aspect</th><th>OLTP — operations</th><th>OLAP — analysis</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Primary goal</td><td>Run the business minute-by-minute</td><td>Understand and grow the business</td></tr>
+        <tr><td>Data age</td><td>Current, live</td><td>Historical (months, years)</td></tr>
+        <tr><td>Query type</td><td>Simple insert / select</td><td>Complex aggregations &amp; sums</td></tr>
+        <tr><td>User base</td><td>Every customer &amp; employee</td><td>Analysts &amp; executives</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <div class="lesson-foot">
     <label class="complete-check">
       <input type="checkbox" class="lesson-done" data-lesson="lesson-7">
       <span>Mark lesson 7 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON: DBMS vs RDBMS ============ -->
+<section class="lesson" id="lesson-dbms" data-title="DBMS vs RDBMS">
+  <header class="lesson-head">
+    <div class="lesson-tag">Vocabulary</div>
+    <h1>DBMS vs RDBMS</h1>
+    <p class="lede">A database isn't just stored data — it's the engine that protects and manages it. That engine has a name.</p>
+  </header>
+
+  <div class="card">
+    <h3>The hierarchy</h3>
+    <p class="muted">Click any node to see what it actually means.</p>
+
+    <div class="hierarchy">
+      <div class="hier-row">
+        <div class="hier-node big" data-key="dbms">
+          <div class="hier-title">DBMS</div>
+          <div class="hier-sub">Database Management System</div>
+        </div>
+      </div>
+      <div class="hier-line"></div>
+      <div class="hier-row hier-row-children">
+        <div class="hier-node featured" data-key="rdbms">
+          <div class="hier-title">RDBMS</div>
+          <div class="hier-sub">Relational</div>
+        </div>
+        <div class="hier-node" data-key="doc">
+          <div class="hier-title">Document</div>
+          <div class="hier-sub">NoSQL · JSON</div>
+        </div>
+        <div class="hier-node" data-key="kv">
+          <div class="hier-title">Key-Value</div>
+          <div class="hier-sub">NoSQL · cache</div>
+        </div>
+        <div class="hier-node" data-key="graph">
+          <div class="hier-title">Graph</div>
+          <div class="hier-sub">NoSQL · networks</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="hier-detail" class="hier-detail">Click any node above.</div>
+  </div>
+
+  <div class="card">
+    <h3>The rule to remember</h3>
+    <div class="rule-box">
+      <div class="rule-line"><span class="rule-check">✓</span> All RDBMS are DBMS.</div>
+      <div class="rule-line"><span class="rule-cross">✗</span> Not all DBMS are RDBMS.</div>
+      <p class="muted" style="margin-top: 12px;">DBMS = the broad category of database engines. RDBMS = the relational kind specifically.</p>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-dbms">
+      <span>Mark complete</span>
     </label>
   </div>
 </section>
