@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL, the fun way</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-mark">SQL</div>
+    <div>
+      <div class="brand-title">SQL, the fun way</div>
+      <div class="brand-sub">Kanishka's playground</div>
+    </div>
+  </div>
+
+  <div class="progress-box">
+    <div class="progress-label">
+      <span>Progress</span>
+      <span id="progress-count">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+
+  <nav id="toc" class="toc"></nav>
+
+  <div class="sidebar-foot">
+    <button id="reset-progress" class="link-btn">Reset progress</button>
+    <button id="theme-toggle" class="link-btn">Toggle theme</button>
+  </div>
+</aside>
+
+<main class="main">
+
+<!-- ============ LESSON 1 ============ -->
+<section class="lesson" id="lesson-1" data-title="Why SQL exists">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 1</div>
+    <h1>Why SQL exists</h1>
+    <p class="lede">Most people learn SQL by memorizing keywords. That's backwards. Let's start with the actual problem SQL solves.</p>
+  </header>
+
+  <div class="card">
+    <h3>1.1 — When does Excel break?</h3>
+    <p class="muted">Drag to grow your dataset. See what survives.</p>
+
+    <input type="range" min="0" max="6" step="1" value="1" id="scl" class="slider">
+    <div class="slider-ticks">
+      <span>100</span><span>1k</span><span>10k</span><span>100k</span><span>1M</span><span>10M</span><span>100M</span>
+    </div>
+
+    <div class="versus">
+      <div class="versus-card">
+        <div class="versus-label">Excel</div>
+        <div class="versus-status" id="ex-st">Fine</div>
+        <div class="versus-detail" id="ex-dt">Manageable in one sheet.</div>
+      </div>
+      <div class="versus-card">
+        <div class="versus-label">SQL database</div>
+        <div class="versus-status" id="db-st">Fine</div>
+        <div class="versus-detail" id="db-dt">Indexed lookup stays fast.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>1.2 — Why exactly does Excel die?</h3>
+    <ol class="reasons">
+      <li><strong>No real indexing</strong> — every filter scans the whole sheet.</li>
+      <li><strong>No safe concurrency</strong> — two people editing the same cell can corrupt data.</li>
+      <li><strong>No enforced rules</strong> — "fees must be &gt; 0" is just a hope.</li>
+      <li><strong>Complex questions get painful</strong> — try "students who attended &gt;80% but paid late" across 6 months.</li>
+      <li><strong>Weak audit and recovery</strong> — Excel assumes things go right. Databases assume things go wrong.</li>
+    </ol>
+    <blockquote>Excel isn't bad. It's just not designed for what databases are designed for.</blockquote>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-1">
+      <span>Mark lesson 1 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 2 ============ -->
+<section class="lesson" id="lesson-2" data-title="How vs what thinking">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 2</div>
+    <h1>The mental shift: HOW vs WHAT</h1>
+    <p class="lede">SQL is declarative. You describe what you want, not how to get it. Most beginner pain comes from trying to think in loops.</p>
+  </header>
+
+  <div class="card">
+    <h3>2.1 — Same goal, two mindsets</h3>
+    <p class="muted">Find all active students.</p>
+    <div class="code-grid">
+      <div>
+        <div class="code-label">Python — say HOW</div>
+        <pre class="code">active = []
+for s in students:
+    if s.is_active:
+        active.append(s)
+return active</pre>
+      </div>
+      <div>
+        <div class="code-label">SQL — say WHAT</div>
+        <pre class="code">SELECT *
+FROM students
+WHERE is_active = 1;</pre>
+      </div>
+    </div>
+    <p>No loops. No counters. You describe the result; the engine picks the strategy — which index, what order, whether to parallelize.</p>
+  </div>
+
+  <div class="card collapsible">
+    <button class="collapse-head" data-target="why-declarative">
+      <span>Why this matters more than it sounds</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="collapse-body" id="why-declarative">
+      <p>When you write a Python loop, you're locked into your strategy. If the data grows 1000×, your code still does the same dumb scan.</p>
+      <p>In SQL, the <em>same query</em> runs on 100 rows or 100 million rows. The engine picks a different plan each time — index scan, hash join, parallel workers. You didn't write any of that. You just described what you wanted.</p>
+      <p>That separation between "what" and "how" is the whole point.</p>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-2">
+      <span>Mark lesson 2 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 3 ============ -->
+<section class="lesson" id="lesson-3" data-title="Tables, rows, columns">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 3</div>
+    <h1>Tables, rows, and columns</h1>
+    <p class="lede">A table is one type of thing. Each row is one of those things. Each column is one property of it. That's the whole model.</p>
+  </header>
+
+  <div class="card">
+    <h3>3.1 — Anatomy of a table</h3>
+    <p class="muted">Hover the row or column highlights to see what each piece is called.</p>
+
+    <div class="anatomy">
+      <table class="data-tbl">
+        <thead>
+          <tr>
+            <th data-explain="column">customer_id</th>
+            <th data-explain="column">name</th>
+            <th data-explain="column">email</th>
+            <th data-explain="column">signup_date</th>
+            <th data-explain="column">is_active</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-explain="row"><td>1</td><td>Aisha Khan</td><td>aisha@example.com</td><td>2024-01-10</td><td>1</td></tr>
+          <tr data-explain="row"><td>2</td><td>Raj Patel</td><td>raj.patel@sample.org</td><td>2024-02-15</td><td>0</td></tr>
+          <tr data-explain="row"><td>3</td><td>Meera Joshi</td><td>meera.j@example.com</td><td>2024-03-01</td><td>1</td></tr>
+        </tbody>
+      </table>
+      <div class="anatomy-explain" id="anatomy-out">Hover a header or a row.</div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-3">
+      <span>Mark lesson 3 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 4 ============ -->
+<section class="lesson" id="lesson-4" data-title="Try a query">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 4</div>
+    <h1>Try a query</h1>
+    <p class="lede">Pick filters. The SQL writes itself. The result updates live.</p>
+  </header>
+
+  <div class="card">
+    <h3>4.1 — Mini playground</h3>
+    <div class="filter-bar" id="fbar">
+      <button class="fbtn on" data-f="all">All students</button>
+      <button class="fbtn" data-f="active">is_active = 1</button>
+      <button class="fbtn" data-f="mumbai">city = 'Mumbai'</button>
+      <button class="fbtn" data-f="paid">fees_paid = 1</button>
+      <button class="fbtn" data-f="active_unpaid">active AND NOT paid</button>
+    </div>
+    <pre class="code" id="sqlq">SELECT * FROM students;</pre>
+    <div id="rtbl"></div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-4">
+      <span>Mark lesson 4 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 5 ============ -->
+<section class="lesson" id="lesson-5" data-title="Transactions">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 5</div>
+    <h1>Transactions — pay fees demo</h1>
+    <p class="lede">One user action, three database steps. Run the happy path, then crash it on purpose.</p>
+  </header>
+
+  <div class="card">
+    <h3>5.1 — Run the transaction</h3>
+    <div class="txn-steps">
+      <div class="txn-row"><div class="txn-dot" id="td1">1</div><div>Deduct ₹5,000 from wallet</div></div>
+      <div class="txn-row"><div class="txn-dot" id="td2">2</div><div>Insert payment record</div></div>
+      <div class="txn-row"><div class="txn-dot" id="td3">3</div><div>Mark student "Fees paid"</div></div>
+    </div>
+    <div class="btn-row">
+      <button id="btn-pay" class="btn btn-primary">▶ Pay fees</button>
+      <button id="btn-crash" class="btn btn-danger">⚡ Pay, then crash at step 2</button>
+      <button id="btn-reset" class="btn">↻ Reset</button>
+    </div>
+    <div id="tstat" class="txn-status">Idle. Wallet ₹10,000, status: Not paid.</div>
+  </div>
+
+  <div class="card collapsible">
+    <button class="collapse-head" data-target="wal-explain">
+      <span>How the database actually does this (WAL)</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="collapse-body" id="wal-explain">
+      <p>Before changing real data, the database writes its intent to a log on disk:</p>
+      <pre class="code">LOG: "About to change wallet 10000 → 5000"
+LOG: "About to insert payment row id=789"
+LOG: "About to update student status to 'paid'"
+LOG: COMMIT</pre>
+      <p>On crash + restart, the database scans the log:</p>
+      <ul>
+        <li>If it sees <code>COMMIT</code> → reapply any unwritten changes.</li>
+        <li>If it doesn't see <code>COMMIT</code> → undo the partial changes.</li>
+      </ul>
+      <p>That's the whole magic.</p>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-5">
+      <span>Mark lesson 5 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 6 ============ -->
+<section class="lesson" id="lesson-6" data-title="ACID">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 6</div>
+    <h1>ACID — the four promises</h1>
+    <p class="lede">Every serious database is designed around these four guarantees. Click any card for the deep version.</p>
+  </header>
+
+  <div class="card">
+    <div class="acid-grid">
+      <button class="acid-card" data-acid="A">
+        <div class="acid-letter">A</div>
+        <div class="acid-name">Atomicity</div>
+        <div class="acid-rule">All steps land or none do.</div>
+      </button>
+      <button class="acid-card" data-acid="C">
+        <div class="acid-letter">C</div>
+        <div class="acid-name">Consistency</div>
+        <div class="acid-rule">Rules are never broken.</div>
+      </button>
+      <button class="acid-card" data-acid="I">
+        <div class="acid-letter">I</div>
+        <div class="acid-name">Isolation</div>
+        <div class="acid-rule">Users don't see each other's half-work.</div>
+      </button>
+      <button class="acid-card" data-acid="D">
+        <div class="acid-letter">D</div>
+        <div class="acid-name">Durability</div>
+        <div class="acid-rule">Committed = permanent. Always.</div>
+      </button>
+    </div>
+    <div id="acid-detail" class="acid-detail">Click any letter.</div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-6">
+      <span>Mark lesson 6 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ LESSON 7 ============ -->
+<section class="lesson" id="lesson-7" data-title="OLTP vs OLAP">
+  <header class="lesson-head">
+    <div class="lesson-tag">Lesson 7</div>
+    <h1>OLTP vs OLAP</h1>
+    <p class="lede">Same SQL language, very different engines. Pick the wrong one and everything is slow.</p>
+  </header>
+
+  <div class="card">
+    <div class="oltp-grid">
+      <div class="oltp-col">
+        <div class="oltp-acro">OLTP</div>
+        <div class="oltp-full"><strong>O</strong>nline <strong>T</strong>ransaction <strong>P</strong>rocessing</div>
+        <div class="oltp-tag">day-to-day operations</div>
+        <ul>
+          <li>Many users at once</li>
+          <li>Tiny, frequent queries</li>
+          <li>Fast response, strict consistency</li>
+          <li><em>Example:</em> mark attendance, book a cab, place an order</li>
+          <li><em>Engines:</em> Postgres, MySQL, Oracle</li>
+        </ul>
+      </div>
+      <div class="oltp-col">
+        <div class="oltp-acro">OLAP</div>
+        <div class="oltp-full"><strong>O</strong>nline <strong>A</strong>nalytical <strong>P</strong>rocessing</div>
+        <div class="oltp-tag">analysis &amp; decision-making</div>
+        <ul>
+          <li>Few users (analysts, dashboards)</li>
+          <li>Huge scans across millions of rows</li>
+          <li>Optimized for aggregation, not consistency</li>
+          <li><em>Example:</em> "average attendance by city over 5 years"</li>
+          <li><em>Engines:</em> Snowflake, BigQuery, Redshift</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-7">
+      <span>Mark lesson 7 complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ============ QUIZ ============ -->
+<section class="lesson" id="lesson-quiz" data-title="Quiz">
+  <header class="lesson-head">
+    <div class="lesson-tag">Checkpoint</div>
+    <h1>Quick check</h1>
+    <p class="lede">Five questions. Tap an answer. Wrong ones go red, right ones green.</p>
+  </header>
+
+  <div class="card">
+    <div id="quiz"></div>
+    <div id="score" class="score"></div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="lesson-quiz">
+      <span>Mark quiz complete</span>
+    </label>
+  </div>
+</section>
+
+<footer class="site-foot">
+  <p class="muted">More lessons coming as Kanishka feeds me more SQL material.</p>
+</footer>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
