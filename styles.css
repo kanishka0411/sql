@@ -2862,6 +2862,20 @@ select:focus { outline: none; border-color: var(--accent); box-shadow: var(--sha
 .rt tr.row-fail td:first-child { color: var(--danger); font-weight: 700; }
 .rt tr { transition: background 0.2s var(--ease), opacity 0.2s var(--ease); }
 
+.cell-null {
+  color: var(--text-soft);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.wildcard-legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.wildcard-legend .fbtn { font-family: var(--font-mono); font-size: 12px; }
+
 /* ========== ACCESSIBILITY ========== */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

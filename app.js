@@ -1229,6 +1229,191 @@ buildClassify('predict-game', 'predict-score', [
   { label: 'Returns?', prompt: "SELECT DISTINCT region FROM countries;", code: true, options: [optN(3), optN(4, true), optN(5), optN(2)], why: "4 — Asia, South America, Oceania, North America (Asia appears once)." }
 ]);
 
+// ============ MODULE 5: FILTERING ESSENTIALS ============
+const users = [
+  { id: 1, email: 'raj@tuf.com', full_name: 'Raj', city: 'Bengaluru', last_purchase_inr: 999, last_coupon_code: 'WELCOME10' },
+  { id: 2, email: 'test_user1@gmail.com', full_name: 'Test User One', city: 'Delhi', last_purchase_inr: 499, last_coupon_code: null },
+  { id: 3, email: 'testXuser2@gmail.com', full_name: 'Test User Two', city: 'Delhi', last_purchase_inr: 750, last_coupon_code: 'WELCOME_2026' },
+  { id: 4, email: 'aayush@company.com', full_name: 'Aayush', city: null, last_purchase_inr: null, last_coupon_code: null },
+  { id: 5, email: 'neha@example.com', full_name: 'Neha', city: '', last_purchase_inr: 1500, last_coupon_code: 'TUF_50' },
+  { id: 6, email: 'mohit@gmail.com', full_name: 'Mohit', city: 'Mumbai', last_purchase_inr: 299, last_coupon_code: 'NEWYEAR10' },
+  { id: 7, email: 'sara@tuf.com', full_name: 'Sara', city: 'Bengaluru', last_purchase_inr: 2000, last_coupon_code: null },
+  { id: 8, email: 'arjun@yahoo.com', full_name: 'Arjun', city: 'Pune', last_purchase_inr: 799, last_coupon_code: 'FLASH_SALE' },
+  { id: 9, email: 'john.doe@gmail.com', full_name: 'John Doe', city: 'Chennai', last_purchase_inr: 300, last_coupon_code: null },
+  { id: 10, email: 'jane_doe@gmail.com', full_name: 'Jane Doe', city: 'Chennai', last_purchase_inr: 1200, last_coupon_code: 'WELCOME_BACK' },
+  { id: 11, email: 'support+trial@tuf.com', full_name: 'Support Trial', city: 'Gurugram', last_purchase_inr: null, last_coupon_code: null },
+  { id: 12, email: 'priya@outlook.com', full_name: 'Priya', city: 'Hyderabad', last_purchase_inr: 999, last_coupon_code: 'WELCOME10' },
+  { id: 13, email: 'sameer@rediffmail.com', full_name: 'Sameer', city: null, last_purchase_inr: 100, last_coupon_code: null },
+  { id: 14, email: 'emptycity@demo.com', full_name: 'Empty City', city: ' ', last_purchase_inr: 499, last_coupon_code: null },
+  { id: 15, email: 'khushi@gmail.com', full_name: 'Khushi', city: 'Delhi', last_purchase_inr: 500, last_coupon_code: 'REFERRAL5' },
+  { id: 16, email: 'promo@demo.com', full_name: 'Promo', city: 'Mumbai', last_purchase_inr: 1499, last_coupon_code: 'TUF_50' },
+  { id: 17, email: 'intern@tuf.com', full_name: 'Intern', city: 'Bengaluru', last_purchase_inr: 899, last_coupon_code: 'WELCOME_BACK' },
+  { id: 18, email: 'hello@sample.com', full_name: 'Hello', city: 'Delhi', last_purchase_inr: null, last_coupon_code: null }
+];
+function uCell(v) {
+  if (v === null || v === undefined) return '<span class="cell-null">NULL</span>';
+  if (v === '') return '<span class="cell-null">(empty)</span>';
+  if (typeof v === 'string' && v.length && v.trim() === '') return '<span class="cell-null">(space)</span>';
+  return typeof v === 'number' ? v.toLocaleString('en-US') : v;
+}
+function uTable(rows, cols, headerMap) {
+  if (!rows.length) return '<div class="muted" style="padding:10px 0;">0 rows.</div>';
+  let h = '<table class="rt"><thead><tr>';
+  cols.forEach(c => h += `<th>${(headerMap && headerMap[c]) || c}</th>`);
+  h += '</tr></thead><tbody>';
+  rows.forEach(r => { h += '<tr>'; cols.forEach(c => h += `<td>${uCell(r[c])}</td>`); h += '</tr>'; });
+  h += '</tbody></table>';
+  return h;
+}
+
+// source table
+const feSource = document.getElementById('fe-source');
+if (feSource) {
+  feSource.innerHTML = uTable(users, ['id', 'email', 'full_name', 'city', 'last_purchase_inr', 'last_coupon_code']);
+}
+
+// --- IS NULL playground ---
+const nlMode = document.getElementById('nl-mode');
+if (nlMode) {
+  const nlCol = document.getElementById('nl-col');
+  const nlNorm = document.getElementById('nl-norm');
+  const nlOut = document.getElementById('nl-out');
+  const nlRes = document.getElementById('nl-res');
+  const nlCount = document.getElementById('nl-count');
+  let nMode = 'null';
+  function runNull() {
+    const col = nlCol.value;
+    const norm = nlNorm.checked;
+    const isMissing = v => (v === null) || (norm && typeof v === 'string' && v.trim() === '');
+    const rows = users.filter(r => nMode === 'null' ? isMissing(r[col]) : !isMissing(r[col]));
+    const expr = norm ? `NULLIF(TRIM(${col}), '')` : col;
+    nlOut.textContent = `SELECT id, email, ${col} FROM users\nWHERE ${expr} ${nMode === 'null' ? 'IS NULL' : 'IS NOT NULL'};`;
+    nlRes.innerHTML = uTable(rows, ['id', 'email', col]);
+    nlCount.textContent = `${rows.length} of ${users.length} rows.`;
+  }
+  nlMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    nlMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    nMode = b.dataset.m; runNull();
+  }));
+  nlCol.addEventListener('change', runNull);
+  nlNorm.addEventListener('change', runNull);
+  runNull();
+}
+
+// --- IN / NOT IN playground ---
+const inMode = document.getElementById('in-mode');
+if (inMode) {
+  const inCities = document.getElementById('in-cities');
+  const inOut = document.getElementById('in-out');
+  const inRes = document.getElementById('in-res');
+  const inCount = document.getElementById('in-count');
+  let iMode = 'in';
+  function runIn() {
+    const list = [...inCities.querySelectorAll('input:checked')].map(c => c.value);
+    if (!list.length) {
+      inOut.textContent = '-- pick at least one city';
+      inRes.innerHTML = '<div class="muted" style="padding:10px 0;">No cities selected.</div>';
+      inCount.textContent = '';
+      return;
+    }
+    const quoted = list.map(c => `'${c}'`).join(', ');
+    inOut.textContent = `SELECT id, email, city FROM users\nWHERE city ${iMode === 'in' ? 'IN' : 'NOT IN'} (${quoted});`;
+    const rows = users.filter(r => {
+      if (r.city === null) return false; // NULL never matches IN, and is excluded from NOT IN
+      return iMode === 'in' ? list.includes(r.city) : !list.includes(r.city);
+    });
+    inRes.innerHTML = uTable(rows, ['id', 'email', 'city']);
+    inCount.textContent = `${rows.length} of ${users.length} rows.`;
+  }
+  inMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    inMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    iMode = b.dataset.m; runIn();
+  }));
+  inCities.addEventListener('change', runIn);
+  runIn();
+}
+
+// --- BETWEEN playground ---
+const btRun = document.getElementById('bt-run');
+if (btRun) {
+  const btMin = document.getElementById('bt-min');
+  const btMax = document.getElementById('bt-max');
+  const btMode = document.getElementById('bt-mode');
+  const btOut = document.getElementById('bt-out');
+  const btRes = document.getElementById('bt-res');
+  const btCount = document.getElementById('bt-count');
+  let bMode = 'between';
+  function runBetween() {
+    const lo = parseFloat(btMin.value), hi = parseFloat(btMax.value);
+    btOut.textContent = `SELECT full_name, last_purchase_inr FROM users\nWHERE last_purchase_inr ${bMode === 'between' ? 'BETWEEN' : 'NOT BETWEEN'} ${btMin.value} AND ${btMax.value};`;
+    const rows = users.filter(r => {
+      if (r.last_purchase_inr === null) return false;
+      const inRange = r.last_purchase_inr >= lo && r.last_purchase_inr <= hi;
+      return bMode === 'between' ? inRange : !inRange;
+    });
+    btRes.innerHTML = uTable(rows, ['full_name', 'last_purchase_inr']);
+    btCount.textContent = `${rows.length} of ${users.length} rows (NULLs never match a range).`;
+  }
+  btMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    btMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    bMode = b.dataset.m; runBetween();
+  }));
+  btRun.addEventListener('click', runBetween);
+  [btMin, btMax].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') runBetween(); }));
+  runBetween();
+}
+
+// --- LIKE playground ---
+const lkMode = document.getElementById('lk-mode');
+if (lkMode) {
+  const lkPat = document.getElementById('lk-pat');
+  const lkOut = document.getElementById('lk-out');
+  const lkRes = document.getElementById('lk-res');
+  const lkCount = document.getElementById('lk-count');
+  let lMode = 'like';
+  function likeToRegex(pattern) {
+    let out = '^';
+    for (let i = 0; i < pattern.length; i++) {
+      const ch = pattern[i];
+      if (ch === '\\' && i + 1 < pattern.length) { out += pattern[i + 1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); i++; continue; }
+      if (ch === '%') { out += '.*'; continue; }
+      if (ch === '_') { out += '.'; continue; }
+      out += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    return new RegExp(out + '$', 'i');
+  }
+  function runLike() {
+    const pat = lkPat.value;
+    lkOut.textContent = `SELECT id, email FROM users\nWHERE email ${lMode === 'like' ? 'LIKE' : 'NOT LIKE'} '${pat}';`;
+    let rows;
+    try {
+      const re = likeToRegex(pat);
+      rows = users.filter(r => lMode === 'like' ? re.test(r.email) : !re.test(r.email));
+    } catch (_) { rows = []; }
+    lkRes.innerHTML = uTable(rows, ['id', 'email']);
+    lkCount.textContent = `${rows.length} of ${users.length} rows.`;
+  }
+  lkMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    lkMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    lMode = b.dataset.m; runLike();
+  }));
+  lkPat.addEventListener('input', runLike);
+  document.querySelectorAll('.wildcard-legend .fbtn').forEach(b => b.addEventListener('click', () => {
+    lkPat.value = b.dataset.pat; runLike();
+  }));
+  runLike();
+}
+
+// --- operator game ---
+buildClassify('fe-opgame', 'fe-opscore', [
+  { label: 'Goal', prompt: 'Find users with no city recorded', options: [opt('IS NULL', true), opt('IS NOT NULL'), opt('IN'), opt('LIKE')], why: "IS NULL — only it finds unknown/missing values." },
+  { label: 'Goal', prompt: 'Users located in Delhi, Mumbai, or Pune', options: [opt('IN', true), opt('BETWEEN'), opt('LIKE'), opt('IS NULL')], why: "IN — clean membership check against a list." },
+  { label: 'Goal', prompt: 'Purchases between ₹400 and ₹800', options: [opt('BETWEEN', true), opt('IN'), opt('LIKE'), opt('IS NOT NULL')], why: "BETWEEN — inclusive numeric range." },
+  { label: 'Goal', prompt: 'Emails ending in @tuf.com', options: [opt('LIKE', true), opt('IN'), opt('BETWEEN'), opt('IS NULL')], why: "LIKE '%@tuf.com' — pattern match with a wildcard." },
+  { label: 'Goal', prompt: 'Users who DID record a city', options: [opt('IS NOT NULL', true), opt('IS NULL'), opt('NOT IN'), opt('NOT LIKE')], why: "IS NOT NULL — keeps rows where the value is present." },
+  { label: 'Goal', prompt: 'Hide all test% accounts from a report', options: [opt('NOT LIKE', true), opt('NOT IN'), opt('LIKE'), opt('BETWEEN')], why: "NOT LIKE 'test%' — exclude rows matching the pattern." }
+]);
+
 // ============ QUERY LIFECYCLE ANIMATION ============
 const lifeBtn = document.getElementById('run-lifecycle');
 if (lifeBtn) {

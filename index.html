@@ -1502,6 +1502,168 @@ WHERE (category = 'Accessories' OR category = 'Cables')
   </div>
 </section>
 
+<!-- ==================== MODULE 5: FILTERING ESSENTIALS ==================== -->
+<section class="lesson" id="filter" data-title="Filtering essentials">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 5</div>
+    <h1>Filtering essentials</h1>
+    <p class="lede">Real data is messy — missing values, ranges, patterns. Meet the operators that handle it: IS NULL, IN, BETWEEN, LIKE (and their NOT forms).</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#fe-null">IS NULL</a>
+    <a href="#fe-in">IN / NOT IN</a>
+    <a href="#fe-between">BETWEEN</a>
+    <a href="#fe-like">LIKE patterns</a>
+    <a href="#fe-game">Operator game</a>
+  </nav>
+
+  <div class="card">
+    <h3>A deliberately messy <code>users</code> table</h3>
+    <p class="muted">Look at the <code>city</code> column: real values, a <code>NULL</code>, an empty string, even a single space. That's why we need special operators.</p>
+    <div id="fe-source"></div>
+    <blockquote><code>NULL</code> ≠ empty string ≠ a space ≠ zero. NULL means "unknown / not recorded" — so it can't be compared with <code>=</code> or <code>!=</code>.</blockquote>
+  </div>
+
+  <!-- IS NULL -->
+  <div class="subsection" id="fe-null">
+    <div class="sub-head"><div class="sub-tag">Missing data · Playground</div><h2>IS NULL / IS NOT NULL</h2></div>
+
+    <div class="card">
+      <p class="muted">Pick a column and a mode. Toggle normalization to treat empty strings and spaces as "missing" too.</p>
+      <div class="control-row">
+        <select id="nl-col">
+          <option value="city">city</option>
+          <option value="last_coupon_code">last_coupon_code</option>
+          <option value="last_purchase_inr">last_purchase_inr</option>
+        </select>
+        <div class="logic-pick" id="nl-mode">
+          <button class="fbtn on" data-m="null">IS NULL</button>
+          <button class="fbtn" data-m="notnull">IS NOT NULL</button>
+        </div>
+        <label class="logic-not"><input type="checkbox" id="nl-norm"> normalize (treat '' &amp; spaces as missing)</label>
+      </div>
+      <pre class="code" id="nl-out">SELECT id, email, city FROM users WHERE city IS NULL;</pre>
+      <div id="nl-count" class="muted" style="margin-bottom:8px;"></div>
+      <div id="nl-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>The normalize trick:</strong> production data has missing values in many forms. <code>NULLIF(TRIM(city), '') IS NOT NULL</code> trims spaces, turns the result into NULL if it's empty, and only keeps truly-present values — folding NULL, '', and ' ' all into "missing".</div>
+    </div>
+  </div>
+
+  <!-- IN -->
+  <div class="subsection" id="fe-in">
+    <div class="sub-head"><div class="sub-tag">Membership · Playground</div><h2>IN / NOT IN</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>IN</code> is a clean shortcut for many <code>OR</code>s. Pick cities to build the list, then flip IN ↔ NOT IN.</p>
+      <div class="col-toggles" id="in-cities">
+        <label><input type="checkbox" value="Bengaluru"> Bengaluru</label>
+        <label><input type="checkbox" value="Delhi" checked> Delhi</label>
+        <label><input type="checkbox" value="Mumbai" checked> Mumbai</label>
+        <label><input type="checkbox" value="Chennai"> Chennai</label>
+        <label><input type="checkbox" value="Pune"> Pune</label>
+        <label><input type="checkbox" value="Hyderabad"> Hyderabad</label>
+        <label><input type="checkbox" value="Gurugram"> Gurugram</label>
+      </div>
+      <div class="logic-pick" id="in-mode" style="margin-bottom:12px;">
+        <button class="fbtn on" data-m="in">IN</button>
+        <button class="fbtn" data-m="notin">NOT IN</button>
+      </div>
+      <pre class="code" id="in-out">SELECT id, email, city FROM users WHERE city IN ('Delhi', 'Mumbai');</pre>
+      <div id="in-count" class="muted" style="margin-bottom:8px;"></div>
+      <div id="in-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>The NOT IN + NULL trap:</strong> if the list has a NULL — <code>NOT IN ('Delhi', NULL)</code> — you get <em>zero</em> rows, because the DB can't prove a value isn't equal to "unknown". Keep NULLs out of NOT IN lists.</div>
+    </div>
+  </div>
+
+  <!-- BETWEEN -->
+  <div class="subsection" id="fe-between">
+    <div class="sub-head"><div class="sub-tag">Ranges · Playground</div><h2>BETWEEN / NOT BETWEEN</h2></div>
+
+    <div class="card">
+      <p class="muted">Inclusive range on <code>last_purchase_inr</code>. Both ends count. NULLs (never purchased) never match a range.</p>
+      <div class="control-row">
+        <span class="muted">from</span>
+        <input class="qinput" id="bt-min" type="number" value="400" style="min-width:100px;">
+        <span class="muted">to</span>
+        <input class="qinput" id="bt-max" type="number" value="800" style="min-width:100px;">
+        <div class="logic-pick" id="bt-mode">
+          <button class="fbtn on" data-m="between">BETWEEN</button>
+          <button class="fbtn" data-m="notbetween">NOT BETWEEN</button>
+        </div>
+        <button class="btn btn-primary" id="bt-run">▶ Run</button>
+      </div>
+      <pre class="code" id="bt-out">SELECT full_name, last_purchase_inr FROM users
+WHERE last_purchase_inr BETWEEN 400 AND 800;</pre>
+      <div id="bt-count" class="muted" style="margin-bottom:8px;"></div>
+      <div id="bt-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> lower value first — <code>BETWEEN 1000 AND 500</code> returns nothing. It's inclusive (both ends included). NULLs never match a range. With dates, <code>'2025-12-31'</code> means midnight, so events later that day get missed unless you include the time.</div>
+    </div>
+  </div>
+
+  <!-- LIKE -->
+  <div class="subsection" id="fe-like">
+    <div class="sub-head"><div class="sub-tag">Patterns · Playground</div><h2>LIKE / NOT LIKE</h2></div>
+
+    <div class="card">
+      <p class="muted">Type a pattern to match against <code>email</code>. <code>%</code> = any number of characters, <code>_</code> = exactly one.</p>
+      <div class="control-row">
+        <input class="qinput" id="lk-pat" type="text" value="%@tuf.com" placeholder="e.g. %@tuf.com or test_%" style="min-width:220px;">
+        <div class="logic-pick" id="lk-mode">
+          <button class="fbtn on" data-m="like">LIKE</button>
+          <button class="fbtn" data-m="notlike">NOT LIKE</button>
+        </div>
+      </div>
+      <div class="wildcard-legend">
+        <button class="fbtn" data-pat="%@tuf.com">%@tuf.com</button>
+        <button class="fbtn" data-pat="test%">test%</button>
+        <button class="fbtn" data-pat="%demo%">%demo%</button>
+        <button class="fbtn" data-pat="J%e">J%e</button>
+        <button class="fbtn" data-pat="_____@gmail.com">_____@gmail.com</button>
+      </div>
+      <pre class="code" id="lk-out">SELECT id, email FROM users WHERE email LIKE '%@tuf.com';</pre>
+      <div id="lk-count" class="muted" style="margin-bottom:8px;"></div>
+      <div id="lk-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Escaping wildcards:</strong> if your data literally contains <code>_</code> or <code>%</code>, escape it with a backslash. <code>LIKE 'test\_user%'</code> matches a real underscore, so it finds <code>test_user1</code> but not <code>testXuser2</code>.</div>
+    </div>
+  </div>
+
+  <!-- Operator game -->
+  <div class="subsection" id="fe-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Which operator fits?</h2></div>
+
+    <div class="card">
+      <h3>🎮 Pick the right tool for the job</h3>
+      <p class="muted">For each goal, tap the operator you'd reach for.</p>
+      <div id="fe-opgame"></div>
+      <div id="fe-opscore" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="filter">
+      <span>Mark Filtering essentials complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
