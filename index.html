@@ -35,627 +35,1472 @@
 
 <main class="main">
 
-<!-- ============ LESSON 1 ============ -->
-<section class="lesson" id="lesson-1" data-title="Why SQL exists">
+<!-- ==================== MODULE 1: OVERVIEW ==================== -->
+<section class="lesson" id="overview" data-title="Overview">
   <header class="lesson-head">
-    <div class="lesson-tag">Lesson 1</div>
-    <h1>Why SQL exists</h1>
-    <p class="lede">Most people learn SQL by memorizing keywords. That's backwards. Let's start with the actual problem SQL solves.</p>
+    <div class="lesson-tag">Module 1</div>
+    <h1>Overview — the big picture</h1>
+    <p class="lede">Why SQL exists, how to think in it, and how databases actually work — before you write a single real query.</p>
   </header>
 
-  <div class="card">
-    <h3>1.1 — When does Excel break?</h3>
-    <p class="muted">Drag to grow your dataset. See what survives.</p>
+  <nav class="subnav">
+    <a href="#ov-why">Why SQL</a>
+    <a href="#ov-howwhat">How vs what</a>
+    <a href="#ov-history">History</a>
+    <a href="#ov-internals">Inside a DB</a>
+    <a href="#ov-tables">Tables</a>
+    <a href="#ov-relational">Relational vs NoSQL</a>
+    <a href="#ov-workloads">OLTP vs OLAP</a>
+    <a href="#ov-transactions">Transactions</a>
+    <a href="#ov-acid">ACID</a>
+    <a href="#ov-dbms">DBMS vs RDBMS</a>
+  </nav>
 
-    <input type="range" min="0" max="6" step="1" value="1" id="scl" class="slider">
-    <div class="slider-ticks">
-      <span>100</span><span>1k</span><span>10k</span><span>100k</span><span>1M</span><span>10M</span><span>100M</span>
+  <!-- Why SQL -->
+  <div class="subsection" id="ov-why">
+    <div class="sub-head"><div class="sub-tag">Concept</div><h2>Why SQL exists</h2></div>
+
+    <div class="card">
+      <h3>When does Excel break?</h3>
+      <p class="muted">Drag to grow your dataset. See what survives.</p>
+
+      <input type="range" min="0" max="6" step="1" value="1" id="scl" class="slider">
+      <div class="slider-ticks">
+        <span>100</span><span>1k</span><span>10k</span><span>100k</span><span>1M</span><span>10M</span><span>100M</span>
+      </div>
+
+      <div class="versus">
+        <div class="versus-card">
+          <div class="versus-label">Excel</div>
+          <div class="versus-status" id="ex-st">Fine</div>
+          <div class="versus-detail" id="ex-dt">Manageable in one sheet.</div>
+        </div>
+        <div class="versus-card">
+          <div class="versus-label">SQL database</div>
+          <div class="versus-status" id="db-st">Fine</div>
+          <div class="versus-detail" id="db-dt">Indexed lookup stays fast.</div>
+        </div>
+      </div>
     </div>
 
-    <div class="versus">
-      <div class="versus-card">
-        <div class="versus-label">Excel</div>
-        <div class="versus-status" id="ex-st">Fine</div>
-        <div class="versus-detail" id="ex-dt">Manageable in one sheet.</div>
-      </div>
-      <div class="versus-card">
-        <div class="versus-label">SQL database</div>
-        <div class="versus-status" id="db-st">Fine</div>
-        <div class="versus-detail" id="db-dt">Indexed lookup stays fast.</div>
-      </div>
+    <div class="card">
+      <h3>Why exactly does Excel die?</h3>
+      <ol class="reasons">
+        <li><strong>No real indexing</strong> — every filter scans the whole sheet.</li>
+        <li><strong>No safe concurrency</strong> — two people editing the same cell can corrupt data.</li>
+        <li><strong>No enforced rules</strong> — "fees must be &gt; 0" is just a hope.</li>
+        <li><strong>Complex questions get painful</strong> — try "students who attended &gt;80% but paid late" across 6 months.</li>
+        <li><strong>Weak audit and recovery</strong> — Excel assumes things go right. Databases assume things go wrong.</li>
+      </ol>
+      <blockquote>Excel isn't bad. It's just not designed for what databases are designed for.</blockquote>
     </div>
   </div>
 
-  <div class="card">
-    <h3>1.2 — Why exactly does Excel die?</h3>
-    <ol class="reasons">
-      <li><strong>No real indexing</strong> — every filter scans the whole sheet.</li>
-      <li><strong>No safe concurrency</strong> — two people editing the same cell can corrupt data.</li>
-      <li><strong>No enforced rules</strong> — "fees must be &gt; 0" is just a hope.</li>
-      <li><strong>Complex questions get painful</strong> — try "students who attended &gt;80% but paid late" across 6 months.</li>
-      <li><strong>Weak audit and recovery</strong> — Excel assumes things go right. Databases assume things go wrong.</li>
-    </ol>
-    <blockquote>Excel isn't bad. It's just not designed for what databases are designed for.</blockquote>
-  </div>
+  <!-- How vs what -->
+  <div class="subsection" id="ov-howwhat">
+    <div class="sub-head"><div class="sub-tag">Mindset</div><h2>The mental shift: HOW vs WHAT</h2></div>
 
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-1">
-      <span>Mark lesson 1 complete</span>
-    </label>
-  </div>
-</section>
-
-<!-- ============ LESSON 2 ============ -->
-<section class="lesson" id="lesson-2" data-title="How vs what thinking">
-  <header class="lesson-head">
-    <div class="lesson-tag">Lesson 2</div>
-    <h1>The mental shift: HOW vs WHAT</h1>
-    <p class="lede">SQL is declarative. You describe what you want, not how to get it. Most beginner pain comes from trying to think in loops.</p>
-  </header>
-
-  <div class="card">
-    <h3>2.1 — Same goal, two mindsets</h3>
-    <p class="muted">Find all active students.</p>
-    <div class="code-grid">
-      <div>
-        <div class="code-label">Python — say HOW</div>
-        <pre class="code">active = []
+    <div class="card">
+      <h3>Same goal, two mindsets</h3>
+      <p class="muted">Find all active students.</p>
+      <div class="code-grid">
+        <div>
+          <div class="code-label">Python — say HOW</div>
+          <pre class="code">active = []
 for s in students:
     if s.is_active:
         active.append(s)
 return active</pre>
-      </div>
-      <div>
-        <div class="code-label">SQL — say WHAT</div>
-        <pre class="code">SELECT *
+        </div>
+        <div>
+          <div class="code-label">SQL — say WHAT</div>
+          <pre class="code">SELECT *
 FROM students
 WHERE is_active = 1;</pre>
+        </div>
+      </div>
+      <p>No loops. No counters. You describe the result; the engine picks the strategy — which index, what order, whether to parallelize.</p>
+    </div>
+
+    <div class="card collapsible">
+      <button class="collapse-head" data-target="why-declarative">
+        <span>Why this matters more than it sounds</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="collapse-body" id="why-declarative">
+        <p>When you write a Python loop, you're locked into your strategy. If the data grows 1000×, your code still does the same dumb scan.</p>
+        <p>In SQL, the <em>same query</em> runs on 100 rows or 100 million rows. The engine picks a different plan each time — index scan, hash join, parallel workers. You didn't write any of that. You just described what you wanted.</p>
+        <p>That separation between "what" and "how" is the whole point.</p>
       </div>
     </div>
-    <p>No loops. No counters. You describe the result; the engine picks the strategy — which index, what order, whether to parallelize.</p>
-  </div>
 
-  <div class="card collapsible">
-    <button class="collapse-head" data-target="why-declarative">
-      <span>Why this matters more than it sounds</span>
-      <span class="chev">▾</span>
-    </button>
-    <div class="collapse-body" id="why-declarative">
-      <p>When you write a Python loop, you're locked into your strategy. If the data grows 1000×, your code still does the same dumb scan.</p>
-      <p>In SQL, the <em>same query</em> runs on 100 rows or 100 million rows. The engine picks a different plan each time — index scan, hash join, parallel workers. You didn't write any of that. You just described what you wanted.</p>
-      <p>That separation between "what" and "how" is the whole point.</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>2.2 — The restaurant analogy</h3>
-    <p class="muted">The cleanest way to feel the difference.</p>
-    <div class="analogy">
-      <div class="analogy-side">
-        <div class="analogy-emoji">🍳</div>
-        <div class="analogy-title">Cooking at home</div>
-        <div class="analogy-sub">Imperative · Python, Java</div>
-        <ul>
-          <li>Get the pan</li>
-          <li>Turn on the gas</li>
-          <li>Add oil</li>
-          <li>Chop onions, stir</li>
-          <li>Watch the heat</li>
-        </ul>
-        <p class="muted">You control every step.</p>
-      </div>
-      <div class="analogy-vs">vs</div>
-      <div class="analogy-side analogy-win">
-        <div class="analogy-emoji">🍕</div>
-        <div class="analogy-title">Ordering at a restaurant</div>
-        <div class="analogy-sub">Declarative · SQL</div>
-        <ul>
-          <li>"I want a pepperoni pizza."</li>
-        </ul>
-        <p class="muted">You describe the result. The kitchen handles the rest.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-2">
-      <span>Mark lesson 2 complete</span>
-    </label>
-  </div>
-</section>
-
-<!-- ============ LESSON: SEQUEL → SQL HISTORY ============ -->
-<section class="lesson" id="lesson-sequel" data-title="SEQUEL to SQL history">
-  <header class="lesson-head">
-    <div class="lesson-tag">History</div>
-    <h1>SEQUEL → SQL: the name story</h1>
-    <p class="lede">Why some engineers say "sequel" and others say S-Q-L. Both are right. Here's the backstory.</p>
-  </header>
-
-  <div class="card">
-    <div class="timeline">
-      <div class="tl-node">
-        <div class="tl-dot">1</div>
-        <div class="tl-year">1974</div>
-        <div class="tl-title">IBM builds SEQUEL</div>
-        <div class="tl-body">Researchers at IBM create a language called <strong>SEQUEL</strong> — Structured English Query Language — for their experimental System R database.</div>
-      </div>
-      <div class="tl-node">
-        <div class="tl-dot">2</div>
-        <div class="tl-year">~1977</div>
-        <div class="tl-title">Trademark conflict</div>
-        <div class="tl-body">An aircraft company already owned the trademark <strong>"Sequel"</strong>. IBM had to drop the name to avoid legal trouble.</div>
-      </div>
-      <div class="tl-node">
-        <div class="tl-dot">3</div>
-        <div class="tl-year">Late 1970s</div>
-        <div class="tl-title">Renamed to SQL</div>
-        <div class="tl-body">IBM shortened it to <strong>SQL</strong> — Structured Query Language. Same language. But the old pronunciation stuck.</div>
-      </div>
-      <div class="tl-node">
-        <div class="tl-dot">4</div>
-        <div class="tl-year">Today</div>
-        <div class="tl-title">Both pronunciations win</div>
-        <div class="tl-body">Engineers at Google, Amazon, every major tech company still say "sequel". Some say S-Q-L. Both are correct.</div>
+    <div class="card">
+      <h3>The restaurant analogy</h3>
+      <p class="muted">The cleanest way to feel the difference.</p>
+      <div class="analogy">
+        <div class="analogy-side">
+          <div class="analogy-emoji">🍳</div>
+          <div class="analogy-title">Cooking at home</div>
+          <div class="analogy-sub">Imperative · Python, Java</div>
+          <ul>
+            <li>Get the pan</li>
+            <li>Turn on the gas</li>
+            <li>Add oil</li>
+            <li>Chop onions, stir</li>
+            <li>Watch the heat</li>
+          </ul>
+          <p class="muted">You control every step.</p>
+        </div>
+        <div class="analogy-vs">vs</div>
+        <div class="analogy-side analogy-win">
+          <div class="analogy-emoji">🍕</div>
+          <div class="analogy-title">Ordering at a restaurant</div>
+          <div class="analogy-sub">Declarative · SQL</div>
+          <ul>
+            <li>"I want a pepperoni pizza."</li>
+          </ul>
+          <p class="muted">You describe the result. The kitchen handles the rest.</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-sequel">
-      <span>Mark complete</span>
-    </label>
-  </div>
-</section>
+  <!-- History -->
+  <div class="subsection" id="ov-history">
+    <div class="sub-head"><div class="sub-tag">History</div><h2>SEQUEL → SQL: the name story</h2></div>
 
-<!-- ============ LESSON: DATABASE INTERNALS ============ -->
-<section class="lesson" id="lesson-internals" data-title="Inside a database">
-  <header class="lesson-head">
-    <div class="lesson-tag">Internals · Game mode</div>
-    <h1>Inside a database: pages, indexes, search</h1>
-    <p class="lede">Databases don't read every row to find one. They're built like a book — with a table of contents called an index.</p>
-  </header>
-
-  <div class="card">
-    <h3>The four pieces</h3>
-    <div class="parts-grid">
-      <div class="part-card">
-        <div class="part-icon">📄</div>
-        <div class="part-name">Pages</div>
-        <div class="part-desc">Rows live in fixed-size pages (~8 KB). The database reads and writes one page at a time, not one row.</div>
-      </div>
-      <div class="part-card">
-        <div class="part-icon">⚡</div>
-        <div class="part-name">Buffer cache</div>
-        <div class="part-desc">Hot pages live in RAM. Disk reads are slow. Cache avoids them when you re-ask the same question.</div>
-      </div>
-      <div class="part-card">
-        <div class="part-icon">🌳</div>
-        <div class="part-name">B-tree index</div>
-        <div class="part-desc">Like a book's index. Jump straight to the right page in a few hops. Most common database index.</div>
-      </div>
-      <div class="part-card">
-        <div class="part-icon">🎯</div>
-        <div class="part-name">Hash lookup</div>
-        <div class="part-desc">When you know the exact ID, hashing finds it in one step. Even faster than a B-tree.</div>
+    <div class="card">
+      <div class="timeline">
+        <div class="tl-node">
+          <div class="tl-dot">1</div>
+          <div class="tl-year">1974</div>
+          <div class="tl-title">IBM builds SEQUEL</div>
+          <div class="tl-body">Researchers at IBM create a language called <strong>SEQUEL</strong> — Structured English Query Language — for their experimental System R database.</div>
+        </div>
+        <div class="tl-node">
+          <div class="tl-dot">2</div>
+          <div class="tl-year">~1977</div>
+          <div class="tl-title">Trademark conflict</div>
+          <div class="tl-body">An aircraft company already owned the trademark <strong>"Sequel"</strong>. IBM had to drop the name to avoid legal trouble.</div>
+        </div>
+        <div class="tl-node">
+          <div class="tl-dot">3</div>
+          <div class="tl-year">Late 1970s</div>
+          <div class="tl-title">Renamed to SQL</div>
+          <div class="tl-body">IBM shortened it to <strong>SQL</strong> — Structured Query Language. Same language. But the old pronunciation stuck.</div>
+        </div>
+        <div class="tl-node">
+          <div class="tl-dot">4</div>
+          <div class="tl-year">Today</div>
+          <div class="tl-title">Both pronunciations win</div>
+          <div class="tl-body">Engineers at Google, Amazon, every major tech company still say "sequel". Some say S-Q-L. Both are correct.</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="card">
-    <h3>🎮 Find Aisha Khan</h3>
-    <p class="muted">She's in row 37 of this 50-row table. Pick a search strategy and watch the difference.</p>
+  <!-- Inside a database -->
+  <div class="subsection" id="ov-internals">
+    <div class="sub-head"><div class="sub-tag">Internals · Game</div><h2>Inside a database: pages, indexes, search</h2></div>
 
-    <div class="search-grid" id="search-grid"></div>
-
-    <div class="search-stats">
-      <div class="stat-card">
-        <div class="stat-label">Steps</div>
-        <div class="stat-num" id="step-count">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Time</div>
-        <div class="stat-num" id="time-count">0ms</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Strategy</div>
-        <div class="stat-num" id="strategy-name" style="font-size: 13px;">—</div>
+    <div class="card">
+      <h3>The four pieces</h3>
+      <div class="parts-grid">
+        <div class="part-card">
+          <div class="part-icon">📄</div>
+          <div class="part-name">Pages</div>
+          <div class="part-desc">Rows live in fixed-size pages (~8 KB). The database reads and writes one page at a time, not one row.</div>
+        </div>
+        <div class="part-card">
+          <div class="part-icon">⚡</div>
+          <div class="part-name">Buffer cache</div>
+          <div class="part-desc">Hot pages live in RAM. Disk reads are slow. Cache avoids them when you re-ask the same question.</div>
+        </div>
+        <div class="part-card">
+          <div class="part-icon">🌳</div>
+          <div class="part-name">B-tree index</div>
+          <div class="part-desc">Like a book's index. Jump straight to the right page in a few hops. Most common database index.</div>
+        </div>
+        <div class="part-card">
+          <div class="part-icon">🎯</div>
+          <div class="part-name">Hash lookup</div>
+          <div class="part-desc">When you know the exact ID, hashing finds it in one step. Even faster than a B-tree.</div>
+        </div>
       </div>
     </div>
 
-    <div class="btn-row">
-      <button class="btn" id="run-scan">🔍 Full scan</button>
-      <button class="btn btn-primary" id="run-index">🌳 Use B-tree</button>
-      <button class="btn" id="reset-search">↻ Reset</button>
+    <div class="card">
+      <h3>🎮 Find Aisha Khan</h3>
+      <p class="muted">She's in row 37 of this 50-row table. Pick a search strategy and watch the difference.</p>
+
+      <div class="search-grid" id="search-grid"></div>
+
+      <div class="search-stats">
+        <div class="stat-card">
+          <div class="stat-label">Steps</div>
+          <div class="stat-num" id="step-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Time</div>
+          <div class="stat-num" id="time-count">0ms</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Strategy</div>
+          <div class="stat-num" id="strategy-name" style="font-size: 13px;">—</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" id="run-scan">🔍 Full scan</button>
+        <button class="btn btn-primary" id="run-index">🌳 Use B-tree</button>
+        <button class="btn" id="reset-search">↻ Reset</button>
+      </div>
+
+      <div id="search-result" class="search-result"></div>
+    </div>
+  </div>
+
+  <!-- Tables -->
+  <div class="subsection" id="ov-tables">
+    <div class="sub-head"><div class="sub-tag">Concept</div><h2>Tables, rows, and columns</h2></div>
+
+    <div class="card">
+      <h3>Anatomy of a table</h3>
+      <p class="muted">Hover the row or column highlights to see what each piece is called.</p>
+
+      <div class="anatomy">
+        <table class="data-tbl">
+          <thead>
+            <tr>
+              <th data-explain="column">customer_id</th>
+              <th data-explain="column">name</th>
+              <th data-explain="column">email</th>
+              <th data-explain="column">signup_date</th>
+              <th data-explain="column">is_active</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-explain="row"><td>1</td><td>Aisha Khan</td><td>aisha@example.com</td><td>2024-01-10</td><td>1</td></tr>
+            <tr data-explain="row"><td>2</td><td>Raj Patel</td><td>raj.patel@sample.org</td><td>2024-02-15</td><td>0</td></tr>
+            <tr data-explain="row"><td>3</td><td>Meera Joshi</td><td>meera.j@example.com</td><td>2024-03-01</td><td>1</td></tr>
+          </tbody>
+        </table>
+        <div class="anatomy-explain" id="anatomy-out">Hover a header or a row.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Relational vs NoSQL -->
+  <div class="subsection" id="ov-relational">
+    <div class="sub-head"><div class="sub-tag">Choices · Mini-game</div><h2>Relational vs NoSQL</h2></div>
+
+    <div class="card">
+      <div class="oltp-grid">
+        <div class="oltp-col">
+          <div class="oltp-acro">Relational</div>
+          <div class="oltp-full">Strict tables, rows, columns, relationships</div>
+          <div class="oltp-tag">structure &amp; correctness</div>
+          <ul>
+            <li>Tables connected via shared identifiers (keys)</li>
+            <li>Strict schema — every row must fit</li>
+            <li>Strong ACID guarantees</li>
+            <li><em>Engines:</em> Postgres, MySQL, Oracle, SQL Server</li>
+            <li><em>Best for:</em> banking, accounting, anywhere data must be 100% accurate</li>
+          </ul>
+        </div>
+        <div class="oltp-col">
+          <div class="oltp-acro">NoSQL</div>
+          <div class="oltp-full">JSON docs, key-value pairs, graphs</div>
+          <div class="oltp-tag">speed &amp; flexibility</div>
+          <ul>
+            <li>No strict schema — flexible structure</li>
+            <li>Related data often stored together (less joining)</li>
+            <li>Optimized for fast reads at scale</li>
+            <li><em>Engines:</em> MongoDB, Cassandra, Redis, Neo4j</li>
+            <li><em>Best for:</em> social feeds, real-time chat, caches, big analytics</li>
+          </ul>
+        </div>
+      </div>
     </div>
 
-    <div id="search-result" class="search-result"></div>
+    <div class="card">
+      <h3>🎮 Pick the right tool</h3>
+      <p class="muted">For each use case — which type fits better? Tap an option, see why.</p>
+      <div id="use-cases"></div>
+      <div id="uc-score" class="uc-score"></div>
+    </div>
   </div>
 
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-internals">
-      <span>Mark complete</span>
-    </label>
-  </div>
-</section>
+  <!-- OLTP vs OLAP -->
+  <div class="subsection" id="ov-workloads">
+    <div class="sub-head"><div class="sub-tag">Concept</div><h2>OLTP vs OLAP</h2></div>
 
-<!-- ============ LESSON 3 ============ -->
-<section class="lesson" id="lesson-3" data-title="Tables, rows, columns">
-  <header class="lesson-head">
-    <div class="lesson-tag">Lesson 3</div>
-    <h1>Tables, rows, and columns</h1>
-    <p class="lede">A table is one type of thing. Each row is one of those things. Each column is one property of it. That's the whole model.</p>
-  </header>
+    <div class="card">
+      <div class="oltp-grid">
+        <div class="oltp-col">
+          <div class="oltp-acro">OLTP</div>
+          <div class="oltp-full"><strong>O</strong>nline <strong>T</strong>ransaction <strong>P</strong>rocessing</div>
+          <div class="oltp-tag">day-to-day operations</div>
+          <ul>
+            <li>Many users at once</li>
+            <li>Tiny, frequent queries</li>
+            <li>Fast response, strict consistency</li>
+            <li><em>Example:</em> mark attendance, book a cab, place an order</li>
+            <li><em>Engines:</em> Postgres, MySQL, Oracle</li>
+          </ul>
+        </div>
+        <div class="oltp-col">
+          <div class="oltp-acro">OLAP</div>
+          <div class="oltp-full"><strong>O</strong>nline <strong>A</strong>nalytical <strong>P</strong>rocessing</div>
+          <div class="oltp-tag">analysis &amp; decision-making</div>
+          <ul>
+            <li>Few users (analysts, dashboards)</li>
+            <li>Huge scans across millions of rows</li>
+            <li>Optimized for aggregation, not consistency</li>
+            <li><em>Example:</em> "average attendance by city over 5 years"</li>
+            <li><em>Engines:</em> Snowflake, BigQuery, Redshift</li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
-  <div class="card">
-    <h3>3.1 — Anatomy of a table</h3>
-    <p class="muted">Hover the row or column highlights to see what each piece is called.</p>
-
-    <div class="anatomy">
-      <table class="data-tbl">
+    <div class="card">
+      <h3>Side by side</h3>
+      <table class="comparison-tbl">
         <thead>
-          <tr>
-            <th data-explain="column">customer_id</th>
-            <th data-explain="column">name</th>
-            <th data-explain="column">email</th>
-            <th data-explain="column">signup_date</th>
-            <th data-explain="column">is_active</th>
-          </tr>
+          <tr><th>Aspect</th><th>OLTP — operations</th><th>OLAP — analysis</th></tr>
         </thead>
         <tbody>
-          <tr data-explain="row"><td>1</td><td>Aisha Khan</td><td>aisha@example.com</td><td>2024-01-10</td><td>1</td></tr>
-          <tr data-explain="row"><td>2</td><td>Raj Patel</td><td>raj.patel@sample.org</td><td>2024-02-15</td><td>0</td></tr>
-          <tr data-explain="row"><td>3</td><td>Meera Joshi</td><td>meera.j@example.com</td><td>2024-03-01</td><td>1</td></tr>
+          <tr><td>Primary goal</td><td>Run the business minute-by-minute</td><td>Understand and grow the business</td></tr>
+          <tr><td>Data age</td><td>Current, live</td><td>Historical (months, years)</td></tr>
+          <tr><td>Query type</td><td>Simple insert / select</td><td>Complex aggregations &amp; sums</td></tr>
+          <tr><td>User base</td><td>Every customer &amp; employee</td><td>Analysts &amp; executives</td></tr>
         </tbody>
       </table>
-      <div class="anatomy-explain" id="anatomy-out">Hover a header or a row.</div>
     </div>
   </div>
 
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-3">
-      <span>Mark lesson 3 complete</span>
-    </label>
-  </div>
-</section>
+  <!-- Transactions -->
+  <div class="subsection" id="ov-transactions">
+    <div class="sub-head"><div class="sub-tag">Concept · Game</div><h2>Transactions — pay fees demo</h2></div>
 
-<!-- ============ LESSON 4: QUERY BUILDER GAME ============ -->
-<section class="lesson" id="lesson-4" data-title="Query builder game">
-  <header class="lesson-head">
-    <div class="lesson-tag">Lesson 4 · Game mode</div>
-    <h1>Build the query</h1>
-    <p class="lede">Drag the right chip into each slot. Wrong piece bounces back. 5 puzzles. Real SQL.</p>
-  </header>
-
-  <div class="card puzzle-card">
-    <div class="puzzle-meta">
-      <span class="puzzle-num">Puzzle <span id="pn">1</span> / 5</span>
-      <span class="puzzle-score">Score <span id="pscore">0</span></span>
-    </div>
-
-    <div class="puzzle-goal" id="pgoal">
-      <span class="goal-label">Goal</span>
-      <span id="goal-text">Loading…</span>
-    </div>
-
-    <div class="query-line" id="qline"></div>
-
-    <div class="palette-label">Drag from here ↓</div>
-    <div class="chip-palette" id="palette"></div>
-
-    <div class="puzzle-buttons">
-      <button class="btn btn-primary" id="run-q" disabled>▶ Run query</button>
-      <button class="btn" id="reset-q">↻ Reset</button>
-      <button class="btn" id="hint-q">💡 Hint</button>
-      <button class="btn btn-primary" id="next-q" style="display:none">Next puzzle →</button>
-    </div>
-
-    <div id="hint-box" class="hint-box"></div>
-    <div id="puzzle-result" class="puzzle-result"></div>
-  </div>
-
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-4">
-      <span>Mark lesson 4 complete</span>
-    </label>
-  </div>
-</section>
-
-<!-- ============ LESSON: RELATIONAL vs NoSQL ============ -->
-<section class="lesson" id="lesson-relational" data-title="Relational vs NoSQL">
-  <header class="lesson-head">
-    <div class="lesson-tag">Choices · Mini-game</div>
-    <h1>Relational vs NoSQL</h1>
-    <p class="lede">Not all databases use tables. Different tools for different jobs. Neither is "better" — they solve different problems.</p>
-  </header>
-
-  <div class="card">
-    <div class="oltp-grid">
-      <div class="oltp-col">
-        <div class="oltp-acro">Relational</div>
-        <div class="oltp-full">Strict tables, rows, columns, relationships</div>
-        <div class="oltp-tag">structure &amp; correctness</div>
-        <ul>
-          <li>Tables connected via shared identifiers (keys)</li>
-          <li>Strict schema — every row must fit</li>
-          <li>Strong ACID guarantees</li>
-          <li><em>Engines:</em> Postgres, MySQL, Oracle, SQL Server</li>
-          <li><em>Best for:</em> banking, accounting, anywhere data must be 100% accurate</li>
-        </ul>
+    <div class="card">
+      <h3>Run the transaction</h3>
+      <p class="muted">One user action, three database steps. Run the happy path, then crash it on purpose.</p>
+      <div class="txn-steps">
+        <div class="txn-row"><div class="txn-dot" id="td1">1</div><div>Deduct ₹5,000 from wallet</div></div>
+        <div class="txn-row"><div class="txn-dot" id="td2">2</div><div>Insert payment record</div></div>
+        <div class="txn-row"><div class="txn-dot" id="td3">3</div><div>Mark student "Fees paid"</div></div>
       </div>
-      <div class="oltp-col">
-        <div class="oltp-acro">NoSQL</div>
-        <div class="oltp-full">JSON docs, key-value pairs, graphs</div>
-        <div class="oltp-tag">speed &amp; flexibility</div>
-        <ul>
-          <li>No strict schema — flexible structure</li>
-          <li>Related data often stored together (less joining)</li>
-          <li>Optimized for fast reads at scale</li>
-          <li><em>Engines:</em> MongoDB, Cassandra, Redis, Neo4j</li>
-          <li><em>Best for:</em> social feeds, real-time chat, caches, big analytics</li>
-        </ul>
+      <div class="btn-row">
+        <button id="btn-pay" class="btn btn-primary">▶ Pay fees</button>
+        <button id="btn-crash" class="btn btn-danger">⚡ Pay, then crash at step 2</button>
+        <button id="btn-reset" class="btn">↻ Reset</button>
       </div>
+      <div id="tstat" class="txn-status">Idle. Wallet ₹10,000, status: Not paid.</div>
     </div>
-  </div>
 
-  <div class="card">
-    <h3>🎮 Pick the right tool</h3>
-    <p class="muted">For each use case — which type fits better? Tap an option, see why.</p>
-    <div id="use-cases"></div>
-    <div id="uc-score" class="uc-score"></div>
-  </div>
-
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-relational">
-      <span>Mark complete</span>
-    </label>
-  </div>
-</section>
-
-<!-- ============ LESSON 5 ============ -->
-<section class="lesson" id="lesson-5" data-title="Transactions">
-  <header class="lesson-head">
-    <div class="lesson-tag">Lesson 5</div>
-    <h1>Transactions — pay fees demo</h1>
-    <p class="lede">One user action, three database steps. Run the happy path, then crash it on purpose.</p>
-  </header>
-
-  <div class="card">
-    <h3>5.1 — Run the transaction</h3>
-    <div class="txn-steps">
-      <div class="txn-row"><div class="txn-dot" id="td1">1</div><div>Deduct ₹5,000 from wallet</div></div>
-      <div class="txn-row"><div class="txn-dot" id="td2">2</div><div>Insert payment record</div></div>
-      <div class="txn-row"><div class="txn-dot" id="td3">3</div><div>Mark student "Fees paid"</div></div>
-    </div>
-    <div class="btn-row">
-      <button id="btn-pay" class="btn btn-primary">▶ Pay fees</button>
-      <button id="btn-crash" class="btn btn-danger">⚡ Pay, then crash at step 2</button>
-      <button id="btn-reset" class="btn">↻ Reset</button>
-    </div>
-    <div id="tstat" class="txn-status">Idle. Wallet ₹10,000, status: Not paid.</div>
-  </div>
-
-  <div class="card collapsible">
-    <button class="collapse-head" data-target="wal-explain">
-      <span>How the database actually does this (WAL)</span>
-      <span class="chev">▾</span>
-    </button>
-    <div class="collapse-body" id="wal-explain">
-      <p>Before changing real data, the database writes its intent to a log on disk:</p>
-      <pre class="code">LOG: "About to change wallet 10000 → 5000"
+    <div class="card collapsible">
+      <button class="collapse-head" data-target="wal-explain">
+        <span>How the database actually does this (WAL)</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="collapse-body" id="wal-explain">
+        <p>Before changing real data, the database writes its intent to a log on disk:</p>
+        <pre class="code">LOG: "About to change wallet 10000 → 5000"
 LOG: "About to insert payment row id=789"
 LOG: "About to update student status to 'paid'"
 LOG: COMMIT</pre>
-      <p>On crash + restart, the database scans the log:</p>
-      <ul>
-        <li>If it sees <code>COMMIT</code> → reapply any unwritten changes.</li>
-        <li>If it doesn't see <code>COMMIT</code> → undo the partial changes.</li>
-      </ul>
-      <p>That's the whole magic.</p>
+        <p>On crash + restart, the database scans the log:</p>
+        <ul>
+          <li>If it sees <code>COMMIT</code> → reapply any unwritten changes.</li>
+          <li>If it doesn't see <code>COMMIT</code> → undo the partial changes.</li>
+        </ul>
+        <p>That's the whole magic.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACID -->
+  <div class="subsection" id="ov-acid">
+    <div class="sub-head"><div class="sub-tag">Concept</div><h2>ACID — the four promises</h2></div>
+
+    <div class="card">
+      <p class="muted">Every serious database is designed around these four guarantees. Click any card for the deep version.</p>
+      <div class="acid-grid">
+        <button class="acid-card" data-acid="A">
+          <div class="acid-letter">A</div>
+          <div class="acid-name">Atomicity</div>
+          <div class="acid-rule">All steps land or none do.</div>
+        </button>
+        <button class="acid-card" data-acid="C">
+          <div class="acid-letter">C</div>
+          <div class="acid-name">Consistency</div>
+          <div class="acid-rule">Rules are never broken.</div>
+        </button>
+        <button class="acid-card" data-acid="I">
+          <div class="acid-letter">I</div>
+          <div class="acid-name">Isolation</div>
+          <div class="acid-rule">Users don't see each other's half-work.</div>
+        </button>
+        <button class="acid-card" data-acid="D">
+          <div class="acid-letter">D</div>
+          <div class="acid-name">Durability</div>
+          <div class="acid-rule">Committed = permanent. Always.</div>
+        </button>
+      </div>
+      <div id="acid-detail" class="acid-detail">Click any letter.</div>
+    </div>
+  </div>
+
+  <!-- DBMS vs RDBMS -->
+  <div class="subsection" id="ov-dbms">
+    <div class="sub-head"><div class="sub-tag">Vocabulary</div><h2>DBMS vs RDBMS</h2></div>
+
+    <div class="card">
+      <h3>The hierarchy</h3>
+      <p class="muted">Click any node to see what it actually means.</p>
+
+      <div class="hierarchy">
+        <div class="hier-row">
+          <div class="hier-node big" data-key="dbms">
+            <div class="hier-title">DBMS</div>
+            <div class="hier-sub">Database Management System</div>
+          </div>
+        </div>
+        <div class="hier-line"></div>
+        <div class="hier-row hier-row-children">
+          <div class="hier-node featured" data-key="rdbms">
+            <div class="hier-title">RDBMS</div>
+            <div class="hier-sub">Relational</div>
+          </div>
+          <div class="hier-node" data-key="doc">
+            <div class="hier-title">Document</div>
+            <div class="hier-sub">NoSQL · JSON</div>
+          </div>
+          <div class="hier-node" data-key="kv">
+            <div class="hier-title">Key-Value</div>
+            <div class="hier-sub">NoSQL · cache</div>
+          </div>
+          <div class="hier-node" data-key="graph">
+            <div class="hier-title">Graph</div>
+            <div class="hier-sub">NoSQL · networks</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="hier-detail" class="hier-detail">Click any node above.</div>
+    </div>
+
+    <div class="card">
+      <h3>The rule to remember</h3>
+      <div class="rule-box">
+        <div class="rule-line"><span class="rule-check">✓</span> All RDBMS are DBMS.</div>
+        <div class="rule-line"><span class="rule-cross">✗</span> Not all DBMS are RDBMS.</div>
+        <p class="muted" style="margin-top: 12px;">DBMS = the broad category of database engines. RDBMS = the relational kind specifically.</p>
+      </div>
     </div>
   </div>
 
   <div class="lesson-foot">
     <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-5">
-      <span>Mark lesson 5 complete</span>
+      <input type="checkbox" class="lesson-done" data-lesson="overview">
+      <span>Mark Overview complete</span>
     </label>
   </div>
 </section>
 
-<!-- ============ LESSON 6 ============ -->
-<section class="lesson" id="lesson-6" data-title="ACID">
+<!-- ==================== MODULE 2: INSTALLATION & TOOLS ==================== -->
+<section class="lesson" id="setup" data-title="Installation & tools">
   <header class="lesson-head">
-    <div class="lesson-tag">Lesson 6</div>
-    <h1>ACID — the four promises</h1>
-    <p class="lede">Every serious database is designed around these four guarantees. Click any card for the deep version.</p>
+    <div class="lesson-tag">Module 2</div>
+    <h1>Installation &amp; tools</h1>
+    <p class="lede">SQL is learned by doing: write → run → observe → fix → repeat. First, build a setup where practicing is effortless.</p>
   </header>
 
-  <div class="card">
-    <div class="acid-grid">
-      <button class="acid-card" data-acid="A">
-        <div class="acid-letter">A</div>
-        <div class="acid-name">Atomicity</div>
-        <div class="acid-rule">All steps land or none do.</div>
-      </button>
-      <button class="acid-card" data-acid="C">
-        <div class="acid-letter">C</div>
-        <div class="acid-name">Consistency</div>
-        <div class="acid-rule">Rules are never broken.</div>
-      </button>
-      <button class="acid-card" data-acid="I">
-        <div class="acid-letter">I</div>
-        <div class="acid-name">Isolation</div>
-        <div class="acid-rule">Users don't see each other's half-work.</div>
-      </button>
-      <button class="acid-card" data-acid="D">
-        <div class="acid-letter">D</div>
-        <div class="acid-name">Durability</div>
-        <div class="acid-rule">Committed = permanent. Always.</div>
-      </button>
+  <nav class="subnav">
+    <a href="#st-where">Where to run SQL</a>
+    <a href="#st-docker">Set up with Docker</a>
+  </nav>
+
+  <!-- Where to run -->
+  <div class="subsection" id="st-where">
+    <div class="sub-head"><div class="sub-tag">Setup · Mini-demo</div><h2>Where do you actually run SQL?</h2></div>
+
+    <div class="card">
+      <h3>The three options</h3>
+      <div class="run-options">
+        <div class="run-card">
+          <div class="run-icon">⌨️</div>
+          <div class="run-name">Terminal</div>
+          <div class="run-sub">Native MySQL CLI</div>
+          <ul class="run-pros">
+            <li class="con">Hard to visualize tables</li>
+            <li class="con">Errors are painful to debug</li>
+            <li class="con">More setup-fighting than learning</li>
+          </ul>
+        </div>
+        <div class="run-card">
+          <div class="run-icon">🌐</div>
+          <div class="run-name">Online editor</div>
+          <div class="run-sub">Browser playgrounds</div>
+          <ul class="run-pros">
+            <li class="con">Network latency every query</li>
+            <li class="con">Depends on someone else's server</li>
+            <li class="con">Random downtime, slow days</li>
+          </ul>
+        </div>
+        <div class="run-card run-win">
+          <div class="run-icon">💻</div>
+          <div class="run-name">Local + UI tool</div>
+          <div class="run-sub">MySQL + Beekeeper, your machine</div>
+          <ul class="run-pros">
+            <li class="pro">Instant — zero latency</li>
+            <li class="pro">Real, beginner-friendly UI</li>
+            <li class="pro">Full control, no surprises</li>
+          </ul>
+        </div>
+      </div>
     </div>
-    <div id="acid-detail" class="acid-detail">Click any letter.</div>
+
+    <div class="card">
+      <h3>🎮 Feel the latency</h3>
+      <p class="muted">Hit each "send" button. The difference is the whole reason.</p>
+      <div class="latency-demo">
+        <div class="lat-row">
+          <div class="lat-label">Online editor</div>
+          <div class="lat-track">
+            <div class="lat-laptop">💻</div>
+            <div class="lat-server">☁️</div>
+            <div class="lat-packet" id="packet-online"></div>
+          </div>
+          <div class="lat-time" id="time-online">—</div>
+        </div>
+        <div class="lat-row">
+          <div class="lat-label">Local MySQL</div>
+          <div class="lat-track">
+            <div class="lat-laptop">💻</div>
+            <div class="lat-server local-srv">⚡</div>
+            <div class="lat-packet local" id="packet-local"></div>
+          </div>
+          <div class="lat-time" id="time-local">—</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="send-online">Send online</button>
+        <button class="btn btn-primary" id="send-local">Send local</button>
+        <button class="btn" id="reset-latency">↻ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Docker -->
+  <div class="subsection" id="st-docker">
+    <div class="sub-head"><div class="sub-tag">Setup · Game</div><h2>Set up MySQL with Docker</h2></div>
+
+    <div class="card">
+      <h3>Why Docker beats native install</h3>
+      <div class="docker-vs">
+        <div class="dv-side dv-bad">
+          <div class="dv-label">Native install</div>
+          <ul>
+            <li>Different installer per OS</li>
+            <li>Default paths differ</li>
+            <li>Port 3306 conflicts</li>
+            <li>Version mismatches</li>
+            <li>Permission issues</li>
+          </ul>
+        </div>
+        <div class="dv-arrow">→</div>
+        <div class="dv-side dv-good">
+          <div class="dv-label">Docker</div>
+          <ul>
+            <li>Same image for everyone</li>
+            <li>Same container internals</li>
+            <li>Steps identical on Mac, Win, Linux</li>
+            <li>No path issues</li>
+            <li>Clean and isolated</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Image vs container — click to compare</h3>
+      <div class="iv-grid">
+        <button class="iv-card" data-iv="image">
+          <div class="iv-icon">📦</div>
+          <div class="iv-name">Image</div>
+          <div class="iv-tag">The template</div>
+        </button>
+        <button class="iv-card" data-iv="container">
+          <div class="iv-icon">▶️</div>
+          <div class="iv-name">Container</div>
+          <div class="iv-tag">The running instance</div>
+        </button>
+      </div>
+      <div id="iv-detail" class="iv-detail">Click either card above.</div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Configure your container</h3>
+      <p class="muted">Fill the form like you would in Docker Desktop. Hit "Start" — wrong or missing values show what would break.</p>
+      <div class="docker-form">
+        <div class="df-row">
+          <label>Container name</label>
+          <input type="text" id="df-name" placeholder="e.g. tuf-sql">
+        </div>
+        <div class="df-row">
+          <label>Port mapping</label>
+          <input type="text" id="df-port" placeholder="3306">
+        </div>
+        <div class="df-row">
+          <label>MYSQL_ROOT_PASSWORD</label>
+          <input type="text" id="df-rootpw" placeholder="admin password (e.g. 123456)">
+        </div>
+        <div class="df-row">
+          <label>MYSQL_DATABASE</label>
+          <input type="text" id="df-db" placeholder="e.g. tuf_sql">
+        </div>
+        <div class="df-row">
+          <label>MYSQL_USER</label>
+          <input type="text" id="df-user" placeholder="normal user (e.g. striver)">
+        </div>
+        <div class="df-row">
+          <label>MYSQL_PASSWORD</label>
+          <input type="text" id="df-userpw" placeholder="password for that user">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="df-start">▶ Start container</button>
+        <button class="btn" id="df-reset">↻ Clear</button>
+      </div>
+      <div id="df-result" class="df-result">Fill the form and start.</div>
+    </div>
+
+    <div class="card">
+      <h3>Connect with Beekeeper Studio</h3>
+      <p class="muted">Beekeeper is the UI that talks to your container. Cleaner than MySQL Workbench, beginner-friendly.</p>
+      <div class="bk-wizard">
+        <div class="bk-row"><label>Type</label><span class="bk-val">MySQL</span></div>
+        <div class="bk-row"><label>Host</label><span class="bk-val">localhost</span></div>
+        <div class="bk-row"><label>Port</label><span class="bk-val">3306</span></div>
+        <div class="bk-row"><label>Username</label><span class="bk-val">root</span></div>
+        <div class="bk-row"><label>Password</label><span class="bk-val">••••••</span></div>
+        <div class="bk-row"><label>Default database</label><span class="bk-val">tuf_sql</span></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="bk-test">Test connection</button>
+      </div>
+      <div id="bk-result" class="bk-result"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div>
+        <strong>Quick tip:</strong> after running <code>CREATE DATABASE tuf_sql_3;</code>, the new database may not appear in Beekeeper's left sidebar immediately. Hit the refresh button on the sidebar panel — it's not a failure, just a UI caching thing.
+      </div>
+    </div>
   </div>
 
   <div class="lesson-foot">
     <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-6">
-      <span>Mark lesson 6 complete</span>
+      <input type="checkbox" class="lesson-done" data-lesson="setup">
+      <span>Mark Installation &amp; tools complete</span>
     </label>
   </div>
 </section>
 
-<!-- ============ LESSON 7 ============ -->
-<section class="lesson" id="lesson-7" data-title="OLTP vs OLAP">
+<!-- ==================== MODULE 3: DATABASE & TABLE BASICS ==================== -->
+<section class="lesson" id="db-basics" data-title="Database & table basics">
   <header class="lesson-head">
-    <div class="lesson-tag">Lesson 7</div>
-    <h1>OLTP vs OLAP</h1>
-    <p class="lede">Same SQL language, very different engines. Pick the wrong one and everything is slow.</p>
+    <div class="lesson-tag">Module 3</div>
+    <h1>Database &amp; table basics</h1>
+    <p class="lede">Now you actually build things: command families, data types, tables, keys, constraints, and how a query runs under the hood.</p>
   </header>
 
-  <div class="card">
-    <div class="oltp-grid">
-      <div class="oltp-col">
-        <div class="oltp-acro">OLTP</div>
-        <div class="oltp-full"><strong>O</strong>nline <strong>T</strong>ransaction <strong>P</strong>rocessing</div>
-        <div class="oltp-tag">day-to-day operations</div>
-        <ul>
-          <li>Many users at once</li>
-          <li>Tiny, frequent queries</li>
-          <li>Fast response, strict consistency</li>
-          <li><em>Example:</em> mark attendance, book a cab, place an order</li>
-          <li><em>Engines:</em> Postgres, MySQL, Oracle</li>
-        </ul>
+  <nav class="subnav">
+    <a href="#db-commands">Command families</a>
+    <a href="#db-database">Database commands</a>
+    <a href="#db-types">Data types</a>
+    <a href="#db-tables">Create &amp; insert</a>
+    <a href="#db-query">Practice query</a>
+    <a href="#db-keys">Keys</a>
+    <a href="#db-relationships">Relationships</a>
+    <a href="#db-constraints">Constraints</a>
+    <a href="#db-null">NULL vs 0 vs ''</a>
+    <a href="#db-lifecycle">Query lifecycle</a>
+    <a href="#db-indexing">Indexing</a>
+  </nav>
+
+  <!-- Command families -->
+  <div class="subsection" id="db-commands">
+    <div class="sub-head"><div class="sub-tag">Vocabulary · Game</div><h2>The 5 SQL command families</h2></div>
+
+    <div class="card">
+      <p class="muted">Every SQL command belongs to one of five families. Click a card to see what it does.</p>
+      <div class="click-grid five">
+        <button class="click-card" data-group="fam" data-key="fam-ddl"><div class="cc-acro">DDL</div><div class="cc-tag">structure</div></button>
+        <button class="click-card" data-group="fam" data-key="fam-dml"><div class="cc-acro">DML</div><div class="cc-tag">the data</div></button>
+        <button class="click-card" data-group="fam" data-key="fam-dql"><div class="cc-acro">DQL</div><div class="cc-tag">reading</div></button>
+        <button class="click-card" data-group="fam" data-key="fam-dcl"><div class="cc-acro">DCL</div><div class="cc-tag">permissions</div></button>
+        <button class="click-card" data-group="fam" data-key="fam-tcl"><div class="cc-acro">TCL</div><div class="cc-tag">transactions</div></button>
       </div>
-      <div class="oltp-col">
-        <div class="oltp-acro">OLAP</div>
-        <div class="oltp-full"><strong>O</strong>nline <strong>A</strong>nalytical <strong>P</strong>rocessing</div>
-        <div class="oltp-tag">analysis &amp; decision-making</div>
-        <ul>
-          <li>Few users (analysts, dashboards)</li>
-          <li>Huge scans across millions of rows</li>
-          <li>Optimized for aggregation, not consistency</li>
-          <li><em>Example:</em> "average attendance by city over 5 years"</li>
-          <li><em>Engines:</em> Snowflake, BigQuery, Redshift</li>
-        </ul>
+      <div class="click-detail" data-group="fam">Click a family above.</div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Which family does each command belong to?</h3>
+      <p class="muted">Tap the family for each command. Wrong picks turn red.</p>
+      <div id="fam-game"></div>
+      <div id="fam-score" class="uc-score"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Case note:</strong> SQL keywords are case-insensitive (<code>SELECT</code> = <code>select</code>), but object names like database/table names can be case-sensitive depending on settings and OS.</div>
+    </div>
+
+    <div class="card">
+      <h3>DDL vs DML — the house analogy</h3>
+      <p class="muted">The two families you'll use most. One shapes the house; the other lives in it.</p>
+      <div class="analogy">
+        <div class="analogy-side">
+          <div class="analogy-emoji">🏗️</div>
+          <div class="analogy-title">DDL = architect &amp; builder</div>
+          <div class="analogy-sub">structure · CREATE, ALTER, DROP</div>
+          <ul>
+            <li>Build a room → CREATE</li>
+            <li>Change the plan → ALTER</li>
+            <li>Knock it down → DROP</li>
+          </ul>
+        </div>
+        <div class="analogy-vs">vs</div>
+        <div class="analogy-side">
+          <div class="analogy-emoji">🛋️</div>
+          <div class="analogy-title">DML = the resident</div>
+          <div class="analogy-sub">contents · INSERT, UPDATE, DELETE</div>
+          <ul>
+            <li>Add a sofa → INSERT</li>
+            <li>Swap the TV → UPDATE</li>
+            <li>Throw out trash → DELETE</li>
+          </ul>
+        </div>
       </div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>DELETE vs TRUNCATE vs DROP:</strong> <code>DELETE</code> is DML — removes rows one by one, can be rolled back in a transaction. <code>TRUNCATE</code> is DDL — wipes the whole table instantly by resetting it, usually can't be undone. <code>DROP</code> removes the table itself, structure and all.</div>
     </div>
   </div>
 
+  <!-- Database commands -->
+  <div class="subsection" id="db-database">
+    <div class="sub-head"><div class="sub-tag">Reference</div><h2>Database setup commands</h2></div>
+
+    <div class="card">
+      <h3>The essentials</h3>
+      <pre class="code">-- create a database
+CREATE DATABASE tuf_sql_2;
+
+-- list all databases
+SHOW DATABASES;
+
+-- switch into one (all later queries run inside it)
+USE tuf_sql;
+
+-- delete a database (irreversible!)
+DROP DATABASE tuf_sql_2;
+
+-- safe create: no error if it already exists
+CREATE DATABASE IF NOT EXISTS tuf_sql;</pre>
+      <blockquote><code>DROP DATABASE</code> is irreversible in most setups — it removes the whole database. Handle with care.</blockquote>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Common mistakes:</strong> it's <code>SHOW DATABASES</code> (plural) but <code>CREATE DATABASE name</code> (singular). Mental model: a database is the whole filing cabinet, a table is a drawer, a row is a file. And there's no recycle bin — <code>DROP DATABASE</code> is gone for good, which is why pros often have DROP permissions removed.</div>
+    </div>
+  </div>
+
+  <!-- Data types -->
+  <div class="subsection" id="db-types">
+    <div class="sub-head"><div class="sub-tag">Reference · Game</div><h2>Common data types</h2></div>
+
+    <div class="card">
+      <h3>What each column can hold</h3>
+      <p class="muted">A data type defines what kind of value a column stores.</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Type</th><th>Stores</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>INT</td><td>Whole numbers — ids, counts, ages</td><td><code>age INT</code></td></tr>
+          <tr><td>BIGINT</td><td>Very large whole numbers</td><td><code>views BIGINT</code></td></tr>
+          <tr><td>VARCHAR(n)</td><td>Variable text up to n chars</td><td><code>email VARCHAR(50)</code></td></tr>
+          <tr><td>TEXT</td><td>Long text — blogs, reviews</td><td><code>description TEXT</code></td></tr>
+          <tr><td>DATE</td><td>Date only</td><td><code>dob DATE</code></td></tr>
+          <tr><td>DATETIME</td><td>Date + time</td><td><code>created_at DATETIME</code></td></tr>
+          <tr><td>BOOLEAN</td><td>true/false (1/0)</td><td><code>is_active BOOLEAN</code></td></tr>
+          <tr><td>DECIMAL(p,s)</td><td>Exact decimals — money</td><td><code>balance DECIMAL(10,2)</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Pick the right type</h3>
+      <p class="muted">For each thing you need to store, tap the best data type.</p>
+      <div id="type-game"></div>
+      <div id="type-score" class="uc-score"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> never use <code>FLOAT</code> for money — rounding errors creep in; use <code>DECIMAL</code>. Don't store numbers or dates as <code>VARCHAR</code> (you lose sorting and math). And don't oversize: a 3-letter country code is <code>VARCHAR(3)</code>, not <code>VARCHAR(255)</code>.</div>
+    </div>
+  </div>
+
+  <!-- Create & insert -->
+  <div class="subsection" id="db-tables">
+    <div class="sub-head"><div class="sub-tag">Reference</div><h2>Create tables, insert, select</h2></div>
+
+    <div class="card">
+      <h3>Create &amp; drop a table</h3>
+      <pre class="code">CREATE TABLE IF NOT EXISTS users (
+  user_id          INT,
+  name             VARCHAR(30),
+  email            VARCHAR(50),
+  is_active        BOOLEAN,
+  account_balance  DECIMAL(10,2),
+  signup_datetime  DATETIME
+);
+
+SHOW TABLES;          -- list tables in the current database
+DROP TABLE IF EXISTS users;   -- IF EXISTS avoids an error if missing</pre>
+    </div>
+
+    <div class="card">
+      <h3>Insert rows</h3>
+      <pre class="code">-- single row
+INSERT INTO users (user_id, name, email)
+VALUES (1, 'Raj', 'raj@gmail.com');
+
+-- multiple rows at once
+INSERT INTO users (user_id, name, email)
+VALUES
+  (2, 'Mark',   'mark@gmail.com'),
+  (3, 'Albert', 'albert@gmail.com'),
+  (4, 'Peter',  'peter@gmail.com');</pre>
+    </div>
+
+    <div class="card">
+      <h3>Read rows + alias</h3>
+      <pre class="code">SELECT * FROM users;          -- everything (avoid on huge tables)
+
+SELECT
+  name,
+  email AS mail_id            -- AS renames the column in output
+FROM users;</pre>
+      <blockquote>Avoid <code>SELECT *</code> on big tables in real systems. Ask only for the columns you need.</blockquote>
+    </div>
+  </div>
+
+  <!-- Practice query (the builder game) -->
+  <div class="subsection" id="db-query">
+    <div class="sub-head"><div class="sub-tag">Practice · Game</div><h2>Build the query</h2></div>
+
+    <div class="card puzzle-card">
+      <p class="muted">Drag the right chip into each slot. Wrong piece bounces back. 5 puzzles, real SQL.</p>
+      <div class="puzzle-meta">
+        <span class="puzzle-num">Puzzle <span id="pn">1</span> / 5</span>
+        <span class="puzzle-score">Score <span id="pscore">0</span></span>
+      </div>
+
+      <div class="puzzle-goal" id="pgoal">
+        <span class="goal-label">Goal</span>
+        <span id="goal-text">Loading…</span>
+      </div>
+
+      <div class="query-line" id="qline"></div>
+
+      <div class="palette-label">Drag from here ↓</div>
+      <div class="chip-palette" id="palette"></div>
+
+      <div class="puzzle-buttons">
+        <button class="btn btn-primary" id="run-q" disabled>▶ Run query</button>
+        <button class="btn" id="reset-q">↻ Reset</button>
+        <button class="btn" id="hint-q">💡 Hint</button>
+        <button class="btn btn-primary" id="next-q" style="display:none">Next puzzle →</button>
+      </div>
+
+      <div id="hint-box" class="hint-box"></div>
+      <div id="puzzle-result" class="puzzle-result"></div>
+    </div>
+  </div>
+
+  <!-- Keys -->
+  <div class="subsection" id="db-keys">
+    <div class="sub-head"><div class="sub-tag">Concept</div><h2>Keys: primary, foreign, composite</h2></div>
+
+    <div class="card">
+      <p class="muted">Keys are how rows stay unique and how tables connect. Click a card.</p>
+      <div class="click-grid three">
+        <button class="click-card" data-group="keys" data-key="key-pk"><div class="cc-name">Primary key</div><div class="cc-tag">unique + not null</div></button>
+        <button class="click-card" data-group="keys" data-key="key-fk"><div class="cc-name">Foreign key</div><div class="cc-tag">links tables</div></button>
+        <button class="click-card" data-group="keys" data-key="key-composite"><div class="cc-name">Composite key</div><div class="cc-tag">multi-column</div></button>
+      </div>
+      <div class="click-detail" data-group="keys">Click a key type above.</div>
+    </div>
+
+    <div class="card">
+      <h3>See the relationship</h3>
+      <p class="muted">A foreign key in <code>orders</code> points at the primary key of <code>users</code>.</p>
+      <div class="key-tables">
+        <div class="key-tbl">
+          <div class="key-tbl-name">users</div>
+          <div class="key-col is-pk">user_id <span class="key-badge pk">PK</span></div>
+          <div class="key-col">name</div>
+          <div class="key-col">email</div>
+        </div>
+        <div class="key-link"><span>FK →</span></div>
+        <div class="key-tbl">
+          <div class="key-tbl-name">orders</div>
+          <div class="key-col">order_id <span class="key-badge pk">PK</span></div>
+          <div class="key-col is-fk">user_id <span class="key-badge fk">FK</span></div>
+          <div class="key-col">amount</div>
+        </div>
+      </div>
+      <pre class="code">CREATE TABLE orders (
+  order_id   INT PRIMARY KEY,
+  user_id    INT,
+  amount     DECIMAL(10,2),
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);</pre>
+      <blockquote>If a table is referenced by a foreign key, drop the child table first (drop <code>orders</code> before <code>users</code>).</blockquote>
+    </div>
+
+    <div class="card">
+      <h3>Primary key vs UNIQUE</h3>
+      <p class="muted">Easy to confuse — here's the clean split.</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>Primary key</th><th>UNIQUE</th></tr></thead>
+        <tbody>
+          <tr><td>How many per table</td><td>Exactly one</td><td>Many allowed</td></tr>
+          <tr><td>NULLs</td><td>Never allowed</td><td>Usually allowed</td></tr>
+          <tr><td>Purpose</td><td>Identifies the whole row</td><td>Prevents duplicates in a column</td></tr>
+          <tr><td>Typical use</td><td>user_id</td><td>email, phone_number</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Will the foreign key let it in?</h3>
+      <p class="muted">The <code>users</code> table has user_id <strong>1</strong> and <strong>2</strong>. Predict PASS or FAIL for each order insert — the FK rejects "ghost" users.</p>
+      <div id="fk-game"></div>
+      <div id="fk-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <!-- Relationships -->
+  <div class="subsection" id="db-relationships">
+    <div class="sub-head"><div class="sub-tag">Concept · Game</div><h2>Keys &amp; relationships</h2></div>
+
+    <div class="card">
+      <p class="muted">A relationship links two tables via a primary key + foreign key. This is why we call them <em>relational</em> databases. Click a type.</p>
+      <div class="click-grid three">
+        <button class="click-card" data-group="rel" data-key="rel-1n"><div class="cc-name">One-to-Many</div><div class="cc-tag">1 : N</div></button>
+        <button class="click-card" data-group="rel" data-key="rel-11"><div class="cc-name">One-to-One</div><div class="cc-tag">1 : 1</div></button>
+        <button class="click-card" data-group="rel" data-key="rel-mn"><div class="cc-name">Many-to-Many</div><div class="cc-tag">M : N</div></button>
+      </div>
+      <div class="click-detail" data-group="rel">Click a relationship type above.</div>
+    </div>
+
+    <div class="card">
+      <h3>Many-to-Many needs a junction table</h3>
+      <p class="muted">A student joins many batches; a batch has many students. A third table in the middle holds the pairs.</p>
+      <div class="key-tables">
+        <div class="key-tbl">
+          <div class="key-tbl-name">students</div>
+          <div class="key-col is-pk">student_id <span class="key-badge pk">PK</span></div>
+          <div class="key-col">name</div>
+        </div>
+        <div class="key-tbl">
+          <div class="key-tbl-name">enrollments</div>
+          <div class="key-col is-fk">student_id <span class="key-badge fk">FK</span></div>
+          <div class="key-col is-fk">batch_id <span class="key-badge fk">FK</span></div>
+        </div>
+        <div class="key-tbl">
+          <div class="key-tbl-name">batches</div>
+          <div class="key-col is-pk">batch_id <span class="key-badge pk">PK</span></div>
+          <div class="key-col">batch_name</div>
+        </div>
+      </div>
+      <pre class="code">SELECT students.name, batches.batch_name
+FROM enrollments
+JOIN students ON enrollments.student_id = students.student_id
+JOIN batches  ON enrollments.batch_id   = batches.batch_id;</pre>
+    </div>
+
+    <div class="card collapsible">
+      <button class="collapse-head" data-target="rel-extra">
+        <span>Normalization &amp; self-referencing tables</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="collapse-body" id="rel-extra">
+        <p><strong>Normalization</strong> = splitting data into related tables so nothing repeats. Store Raj's email once in <code>students</code>; his six fee rows just reference his id. Change the email in one place and every fee row stays correct. This avoids "update anomalies".</p>
+        <p><strong>Self-referencing</strong> = a table points at itself. A mentor is also a student, so <code>mentor_id</code> is a foreign key back into the same <code>students</code> table:</p>
+        <pre class="code">SELECT s1.name AS student, s2.name AS mentor
+FROM students s1
+LEFT JOIN students s2 ON s1.mentor_id = s2.student_id;</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 What relationship is this?</h3>
+      <p class="muted">For each scenario, pick the relationship type.</p>
+      <div id="rel-game"></div>
+      <div id="rel-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <!-- Constraints -->
+  <div class="subsection" id="db-constraints">
+    <div class="sub-head"><div class="sub-tag">Rules · Game</div><h2>Constraints — the table's rulebook</h2></div>
+
+    <div class="card">
+      <p class="muted">Constraints are rules the database enforces for you. Click one.</p>
+      <div class="click-grid five">
+        <button class="click-card" data-group="con" data-key="con-auto"><div class="cc-name">AUTO_INCREMENT</div></button>
+        <button class="click-card" data-group="con" data-key="con-notnull"><div class="cc-name">NOT NULL</div></button>
+        <button class="click-card" data-group="con" data-key="con-unique"><div class="cc-name">UNIQUE</div></button>
+        <button class="click-card" data-group="con" data-key="con-check"><div class="cc-name">CHECK</div></button>
+        <button class="click-card" data-group="con" data-key="con-default"><div class="cc-name">DEFAULT</div></button>
+      </div>
+      <div class="click-detail" data-group="con">Click a constraint above.</div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Will the insert survive?</h3>
+      <p class="muted">Our <code>users</code> table has these rules. Predict PASS or FAIL for each insert.</p>
+      <pre class="code">CREATE TABLE users (
+  user_id   INT PRIMARY KEY AUTO_INCREMENT,
+  name      VARCHAR(30),
+  email     VARCHAR(50) NOT NULL UNIQUE,
+  age       INT CHECK (age >= 15 AND age <= 30),
+  is_active BOOLEAN DEFAULT TRUE
+);</pre>
+      <div id="con-game"></div>
+      <div id="con-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <!-- NULL vs 0 vs '' -->
+  <div class="subsection" id="db-null">
+    <div class="sub-head"><div class="sub-tag">Concept · Game</div><h2>NULL vs 0 vs empty string</h2></div>
+
+    <div class="card">
+      <div class="null-cards">
+        <div class="null-card">
+          <div class="null-tag">NULL</div>
+          <div class="null-desc">No value at all — unknown or not applicable. Not zero, not blank text.</div>
+          <div class="null-ex">e.g. someone has no middle name</div>
+        </div>
+        <div class="null-card">
+          <div class="null-tag">0</div>
+          <div class="null-desc">A real number. We know the value and it is exactly zero.</div>
+          <div class="null-ex">e.g. ordered quantity = 0</div>
+        </div>
+        <div class="null-card">
+          <div class="null-tag">'' </div>
+          <div class="null-desc">An empty string — valid text, just zero characters long.</div>
+          <div class="null-ex">e.g. user left nickname blank on purpose</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Which one fits?</h3>
+      <p class="muted">For each scenario, pick the right representation.</p>
+      <div id="null-game"></div>
+      <div id="null-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>How they behave in queries</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th>Concept</th><th>How to check</th><th>In AVG() / SUM()</th></tr></thead>
+        <tbody>
+          <tr><td>NULL</td><td><code>WHERE col IS NULL</code></td><td>Ignored</td></tr>
+          <tr><td>0</td><td><code>WHERE col = 0</code></td><td>Included</td></tr>
+          <tr><td>'' (empty)</td><td><code>WHERE col = ''</code></td><td>Not a number</td></tr>
+        </tbody>
+      </table>
+      <blockquote>Never write <code>WHERE col = NULL</code> — it never matches. Use <code>IS NULL</code>. And <code>COUNT(col)</code> skips NULLs, while <code>COUNT(*)</code> counts every row.</blockquote>
+    </div>
+  </div>
+
+  <!-- Query lifecycle -->
+  <div class="subsection" id="db-lifecycle">
+    <div class="sub-head"><div class="sub-tag">Internals · Animated</div><h2>Query lifecycle: parse → plan → execute</h2></div>
+
+    <div class="card">
+      <p class="muted">When you run a query, the database doesn't answer instantly. It goes through three stages.</p>
+      <div class="pipeline">
+        <div class="pipe-stage" id="ps-parse">
+          <div class="pipe-num">1</div>
+          <div class="pipe-title">Parse</div>
+          <div class="pipe-desc">Is the SQL valid? Do the tables &amp; columns exist?</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-stage" id="ps-plan">
+          <div class="pipe-num">2</div>
+          <div class="pipe-title">Plan</div>
+          <div class="pipe-desc">What's the fastest way? Index scan or full scan?</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-stage" id="ps-exec">
+          <div class="pipe-num">3</div>
+          <div class="pipe-title">Execute</div>
+          <div class="pipe-desc">Read the rows, filter, return the result.</div>
+        </div>
+      </div>
+
+      <pre class="code">SELECT name, email
+FROM customers
+WHERE city = 'Mumbai';</pre>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="run-lifecycle">▶ Run through the engine</button>
+      </div>
+      <div id="lifecycle-status" class="lifecycle-status">Press run to watch the query flow through all three stages.</div>
+    </div>
+  </div>
+
+  <!-- Indexing -->
+  <div class="subsection" id="db-indexing">
+    <div class="sub-head"><div class="sub-tag">Performance · Game</div><h2>Indexing — the book at the back</h2></div>
+
+    <div class="card">
+      <h3>How an index works</h3>
+      <p class="muted">You saw the speed difference in the <a href="#ov-internals">find-Aisha game</a>. Here's what's actually happening.</p>
+      <p>An index is a separate, automatically-sorted mini-table holding two things: a <strong>sorted copy</strong> of the column (e.g. all emails A→Z) and a <strong>pointer</strong> to the real row. Because it's sorted, the database uses binary search — 1,000,000 rows might need only ~20 lookups instead of a million.</p>
+      <pre class="code">-- jump straight to a value instead of scanning
+CREATE INDEX idx_user_email ON users(email);
+
+-- one index covering two columns searched together
+CREATE INDEX idx_name_city ON users(full_name, city);</pre>
+    </div>
+
+    <div class="card">
+      <h3>Full scan vs index lookup</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>Full table scan</th><th>Index lookup</th></tr></thead>
+        <tbody>
+          <tr><td>Search speed</td><td>Slow (linear)</td><td>Fast (logarithmic)</td></tr>
+          <tr><td>Disk space</td><td>Main table only</td><td>Extra space for the index</td></tr>
+          <tr><td>Insert speed</td><td>Fast</td><td>Slower (must update index)</td></tr>
+          <tr><td>Best for</td><td>Small tables</td><td>Large tables</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>The hidden cost (write penalty):</strong> every INSERT, UPDATE, or DELETE must also update every index on the table. 10 indexes = writes roughly 10× heavier. Only index columns you frequently filter or sort by.</div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Should you index this column?</h3>
+      <p class="muted">Tap yes or no for each. Think about how often it's searched vs how often it changes.</p>
+      <div id="idx-game"></div>
+      <div id="idx-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="db-basics">
+      <span>Mark Database &amp; table basics complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ==================== MODULE 4: QUERY FUNDAMENTALS ==================== -->
+<section class="lesson" id="query" data-title="Query fundamentals">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 4</div>
+    <h1>Query fundamentals</h1>
+    <p class="lede">Reading data: SELECT, WHERE, operators, ORDER BY, LIMIT, DISTINCT, AS. Every playground below runs on a real <code>countries</code> table.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#qf-select">SELECT &amp; FROM</a>
+    <a href="#qf-where">WHERE</a>
+    <a href="#qf-comparison">Comparison</a>
+    <a href="#qf-logical">Logical AND/OR/NOT</a>
+    <a href="#qf-arithmetic">Arithmetic</a>
+    <a href="#qf-order">ORDER BY &amp; LIMIT</a>
+    <a href="#qf-distinct">DISTINCT &amp; AS</a>
+    <a href="#qf-predict">Predict game</a>
+  </nav>
+
   <div class="card">
-    <h3>Side by side</h3>
-    <table class="comparison-tbl">
-      <thead>
-        <tr><th>Aspect</th><th>OLTP — operations</th><th>OLAP — analysis</th></tr>
-      </thead>
+    <h3>The table we'll use</h3>
+    <p class="muted">A 5-row <code>countries</code> table. Every example below queries this.</p>
+    <table class="rt">
+      <thead><tr><th>id</th><th>country</th><th>population</th><th>area</th><th>region</th></tr></thead>
       <tbody>
-        <tr><td>Primary goal</td><td>Run the business minute-by-minute</td><td>Understand and grow the business</td></tr>
-        <tr><td>Data age</td><td>Current, live</td><td>Historical (months, years)</td></tr>
-        <tr><td>Query type</td><td>Simple insert / select</td><td>Complex aggregations &amp; sums</td></tr>
-        <tr><td>User base</td><td>Every customer &amp; employee</td><td>Analysts &amp; executives</td></tr>
+        <tr><td>1</td><td>India</td><td>1,400,000,000</td><td>3,287,000</td><td>Asia</td></tr>
+        <tr><td>2</td><td>China</td><td>1,200,000,000</td><td>4,287,000</td><td>Asia</td></tr>
+        <tr><td>3</td><td>Brazil</td><td>214,000,000</td><td>8,516,000</td><td>South America</td></tr>
+        <tr><td>4</td><td>Australia</td><td>25,700,000</td><td>7,692,000</td><td>Oceania</td></tr>
+        <tr><td>5</td><td>USA</td><td>331,000,000</td><td>9,834,000</td><td>North America</td></tr>
       </tbody>
     </table>
   </div>
 
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-7">
-      <span>Mark lesson 7 complete</span>
-    </label>
-  </div>
-</section>
+  <!-- SELECT & FROM -->
+  <div class="subsection" id="qf-select">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>SELECT &amp; FROM</h2></div>
 
-<!-- ============ LESSON: DBMS vs RDBMS ============ -->
-<section class="lesson" id="lesson-dbms" data-title="DBMS vs RDBMS">
-  <header class="lesson-head">
-    <div class="lesson-tag">Vocabulary</div>
-    <h1>DBMS vs RDBMS</h1>
-    <p class="lede">A database isn't just stored data — it's the engine that protects and manages it. That engine has a name.</p>
-  </header>
-
-  <div class="card">
-    <h3>The hierarchy</h3>
-    <p class="muted">Click any node to see what it actually means.</p>
-
-    <div class="hierarchy">
-      <div class="hier-row">
-        <div class="hier-node big" data-key="dbms">
-          <div class="hier-title">DBMS</div>
-          <div class="hier-sub">Database Management System</div>
-        </div>
-      </div>
-      <div class="hier-line"></div>
-      <div class="hier-row hier-row-children">
-        <div class="hier-node featured" data-key="rdbms">
-          <div class="hier-title">RDBMS</div>
-          <div class="hier-sub">Relational</div>
-        </div>
-        <div class="hier-node" data-key="doc">
-          <div class="hier-title">Document</div>
-          <div class="hier-sub">NoSQL · JSON</div>
-        </div>
-        <div class="hier-node" data-key="kv">
-          <div class="hier-title">Key-Value</div>
-          <div class="hier-sub">NoSQL · cache</div>
-        </div>
-        <div class="hier-node" data-key="graph">
-          <div class="hier-title">Graph</div>
-          <div class="hier-sub">NoSQL · networks</div>
-        </div>
+    <div class="card">
+      <h3>The order the database really runs it</h3>
+      <p class="muted">You write SELECT first, but the engine starts with FROM.</p>
+      <div class="exec-order">
+        <span class="exec-step">1 · FROM <em>find the table</em></span>
+        <span class="exec-sep">→</span>
+        <span class="exec-step">2 · WHERE <em>keep matching rows</em></span>
+        <span class="exec-sep">→</span>
+        <span class="exec-step">3 · SELECT <em>pick the columns</em></span>
       </div>
     </div>
 
-    <div id="hier-detail" class="hier-detail">Click any node above.</div>
+    <div class="card">
+      <h3>🎮 Pick your columns</h3>
+      <p class="muted">Tick the columns you want. The query and result update live.</p>
+      <div class="col-toggles" id="qcols">
+        <label><input type="checkbox" value="id"> id</label>
+        <label><input type="checkbox" value="country" checked> country</label>
+        <label><input type="checkbox" value="population" checked> population</label>
+        <label><input type="checkbox" value="area"> area</label>
+        <label><input type="checkbox" value="region"> region</label>
+      </div>
+      <pre class="code" id="qsel-out">SELECT country, population FROM countries;</pre>
+      <div id="qsel-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>SELECT can do more than fetch</h3>
+      <pre class="code">-- math on the fly, named with AS
+SELECT country, population / area AS density FROM countries;
+
+-- a static label column
+SELECT country, 'In Asia region' AS note FROM countries;</pre>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> no comma after the last column (<code>SELECT name, age, FROM…</code> is wrong). Avoid <code>SELECT *</code> in real apps — fetching 50 columns when you need 2 wastes memory. Column order in your SELECT is the order they appear in the output.</div>
+    </div>
   </div>
 
-  <div class="card">
-    <h3>The rule to remember</h3>
-    <div class="rule-box">
-      <div class="rule-line"><span class="rule-check">✓</span> All RDBMS are DBMS.</div>
-      <div class="rule-line"><span class="rule-cross">✗</span> Not all DBMS are RDBMS.</div>
-      <p class="muted" style="margin-top: 12px;">DBMS = the broad category of database engines. RDBMS = the relational kind specifically.</p>
+  <!-- WHERE -->
+  <div class="subsection" id="qf-where">
+    <div class="sub-head"><div class="sub-tag">Filter · Playground</div><h2>WHERE — the gatekeeper</h2></div>
+
+    <div class="card">
+      <p class="muted">WHERE checks every row: condition true → row stays, false → row blocked. It runs <em>before</em> SELECT, so you can filter on a column you don't display.</p>
+      <div class="control-row">
+        <select id="wf-col">
+          <option value="region">region</option>
+          <option value="country">country</option>
+          <option value="population">population</option>
+          <option value="area">area</option>
+        </select>
+        <select id="wf-op">
+          <option value="=">=</option>
+          <option value="!=">!=</option>
+          <option value="<">&lt;</option>
+          <option value=">">&gt;</option>
+          <option value="<=">&lt;=</option>
+          <option value=">=">&gt;=</option>
+        </select>
+        <input class="qinput" id="wf-val" type="text" value="Asia" placeholder="value">
+        <button class="btn btn-primary" id="wf-run">▶ Run</button>
+      </div>
+      <pre class="code" id="wf-out">SELECT * FROM countries WHERE region = 'Asia';</pre>
+      <div id="wf-count" class="muted" style="margin-bottom:8px;"></div>
+      <div id="wf-res"></div>
+      <p class="muted" style="margin-top:8px;">✓ = row kept, ✗ = row blocked by the gatekeeper.</p>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Watch out:</strong> text needs single quotes (<code>region = 'Asia'</code>), numbers don't. Matching is usually case-sensitive. And you <em>can't</em> use a SELECT alias in WHERE — WHERE runs before the alias exists.</div>
+    </div>
+  </div>
+
+  <!-- Comparison operators -->
+  <div class="subsection" id="qf-comparison">
+    <div class="sub-head"><div class="sub-tag">Reference</div><h2>Comparison operators</h2></div>
+
+    <div class="card">
+      <p class="muted">Swap any of these into the WHERE playground above.</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Operator</th><th>Meaning</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;</code></td><td>Less than</td><td><code>population &lt; 50000000</code></td></tr>
+          <tr><td><code>&gt;</code></td><td>Greater than</td><td><code>area &gt; 5000000</code></td></tr>
+          <tr><td><code>&lt;=</code></td><td>Less than or equal</td><td><code>area &lt;= 4287000</code></td></tr>
+          <tr><td><code>&gt;=</code></td><td>Greater than or equal</td><td><code>population &gt;= 331000000</code></td></tr>
+          <tr><td><code>=</code></td><td>Equal to</td><td><code>region = 'Asia'</code></td></tr>
+          <tr><td><code>!= / &lt;&gt;</code></td><td>Not equal to</td><td><code>region != 'Asia'</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> SQL uses a single <code>=</code> for comparison (not <code>==</code> like Python). Don't quote numbers — <code>price &gt; '100'</code> forces a slow text conversion. For <code>&lt;=</code> / <code>&gt;=</code> the equals sign comes second.</div>
+    </div>
+  </div>
+
+  <!-- Logical operators -->
+  <div class="subsection" id="qf-logical">
+    <div class="sub-head"><div class="sub-tag">Combine · Playground</div><h2>Logical AND / OR / NOT</h2></div>
+
+    <div class="card">
+      <p class="muted">Two conditions on every row. Flip the connector and watch which countries survive.</p>
+      <div class="logic-conds">
+        <span class="logic-cond"><strong>A:</strong> population &gt; 50,000,000</span>
+        <div class="logic-pick" id="lg-conn">
+          <button class="fbtn on" data-c="AND">A AND B</button>
+          <button class="fbtn" data-c="OR">A OR B</button>
+        </div>
+        <span class="logic-cond"><strong>B:</strong> area &lt; 5,000,000</span>
+      </div>
+      <label class="logic-not"><input type="checkbox" id="lg-not"> wrap it in <code>NOT ( … )</code></label>
+      <pre class="code" id="lg-out">SELECT * FROM countries
+WHERE population &gt; 50000000 AND area &lt; 5000000;</pre>
+      <div id="lg-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>The precedence trap</h3>
+      <p class="muted">SQL applies AND before OR. Without parentheses you can get surprises — always group OR conditions.</p>
+      <pre class="code">-- "Accessories or Cables, AND under 20"
+WHERE (category = 'Accessories' OR category = 'Cables')
+  AND price &lt; 20;   -- brackets force OR first</pre>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> repeat the column each time — <code>region = 'Asia' OR 'Oceania'</code> is wrong; write <code>region = 'Asia' OR region = 'Oceania'</code>. And <code>region = 'Asia' AND region = 'Oceania'</code> returns zero rows — one row can't be two regions.</div>
+    </div>
+  </div>
+
+  <!-- Arithmetic operators -->
+  <div class="subsection" id="qf-arithmetic">
+    <div class="sub-head"><div class="sub-tag">Math · Playground</div><h2>Arithmetic operators</h2></div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Operator</th><th>Does</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>+ - * /</code></td><td>Add, subtract, multiply, divide</td><td><code>SELECT 10 * 5;</code></td></tr>
+          <tr><td><code>%</code></td><td>Modulus (remainder)</td><td><code>SELECT 10 % 3;</code> → 1</td></tr>
+          <tr><td><code>DIV</code></td><td>Integer division (MySQL)</td><td><code>SELECT 7 DIV 2;</code> → 3</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Compute population density</h3>
+      <p class="muted">density = population / area. Hit the button to calculate it for every row on the fly.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="ar-run">▶ SELECT country, population / area AS density</button>
+        <button class="btn" id="ar-reset">↻ Reset</button>
+      </div>
+      <div id="ar-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Division by zero:</strong> MySQL won't crash — it returns <code>NULL</code> plus a warning. The production-safe pattern is <code>population / NULLIF(area, 0)</code>: if area is 0, <code>NULLIF</code> turns it into NULL, so you divide by NULL (= NULL) with no warning.</div>
+    </div>
+  </div>
+
+  <!-- ORDER BY & LIMIT -->
+  <div class="subsection" id="qf-order">
+    <div class="sub-head"><div class="sub-tag">Sort · Playground</div><h2>ORDER BY &amp; LIMIT</h2></div>
+
+    <div class="card">
+      <p class="muted">Sort the rows, then keep only the top few. Classic "Top N" pattern.</p>
+      <div class="control-row">
+        <span class="muted">Sort by</span>
+        <select id="ob-col">
+          <option value="area">area</option>
+          <option value="population">population</option>
+          <option value="country">country</option>
+          <option value="region">region</option>
+        </select>
+        <div class="logic-pick" id="ob-dir">
+          <button class="fbtn on" data-d="ASC">ASC ↑</button>
+          <button class="fbtn" data-d="DESC">DESC ↓</button>
+        </div>
+        <span class="muted">LIMIT</span>
+        <input type="range" min="1" max="5" value="5" id="ob-lim" class="slider" style="width:120px;">
+        <span id="ob-lim-val" style="font-weight:600;">5</span>
+      </div>
+      <pre class="code" id="ob-out">SELECT country, area FROM countries ORDER BY area ASC LIMIT 5;</pre>
+      <div id="ob-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Good to know:</strong> default is <code>ASC</code> (small→large, A→Z). <code>LIMIT</code> goes last in the query. You can sort by multiple columns — <code>ORDER BY region ASC, area DESC</code> uses the second as a tie-breaker. You can even sort by an alias.</div>
+    </div>
+  </div>
+
+  <!-- DISTINCT & AS -->
+  <div class="subsection" id="qf-distinct">
+    <div class="sub-head"><div class="sub-tag">Clean up · Playground</div><h2>DISTINCT &amp; AS (aliases)</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>DISTINCT</code> removes duplicate values. <code>AS</code> renames a column header for the output (the real table is unchanged).</p>
+      <div class="control-row">
+        <label class="logic-not"><input type="checkbox" id="ds-distinct" checked> DISTINCT</label>
+        <span class="muted">rename header (AS):</span>
+        <input class="qinput" id="ds-alias" type="text" value="unique_region" placeholder="alias">
+      </div>
+      <pre class="code" id="ds-out">SELECT DISTINCT region AS unique_region FROM countries;</pre>
+      <div id="ds-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> <code>DISTINCT</code> goes right after <code>SELECT</code>. <code>DISTINCT region, country</code> dedupes unique <em>pairs</em>, not each column alone. And you can't use an alias in <code>WHERE</code> (it's created after filtering). Prefer underscores over spaces in alias names.</div>
+    </div>
+  </div>
+
+  <!-- Predict game -->
+  <div class="subsection" id="qf-predict">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Predict the result</h2></div>
+
+    <div class="card">
+      <h3>🎮 How many rows comes back?</h3>
+      <p class="muted">Read each query against the 5-row countries table and pick the row count.</p>
+      <div id="predict-game"></div>
+      <div id="predict-score" class="uc-score"></div>
     </div>
   </div>
 
   <div class="lesson-foot">
     <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-dbms">
-      <span>Mark complete</span>
+      <input type="checkbox" class="lesson-done" data-lesson="query">
+      <span>Mark Query fundamentals complete</span>
     </label>
   </div>
 </section>
-
-<!-- ============ QUIZ ============ -->
-<section class="lesson" id="lesson-quiz" data-title="Quiz">
-  <header class="lesson-head">
-    <div class="lesson-tag">Checkpoint</div>
-    <h1>Quick check</h1>
-    <p class="lede">Five questions. Tap an answer. Wrong ones go red, right ones green.</p>
-  </header>
-
-  <div class="card">
-    <div id="quiz"></div>
-    <div id="score" class="score"></div>
-  </div>
-
-  <div class="lesson-foot">
-    <label class="complete-check">
-      <input type="checkbox" class="lesson-done" data-lesson="lesson-quiz">
-      <span>Mark quiz complete</span>
-    </label>
-  </div>
-</section>
-
-<footer class="site-foot">
-  <p class="muted">More lessons coming as Kanishka feeds me more SQL material.</p>
-</footer>
 
 </main>
 
