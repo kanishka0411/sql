@@ -1414,6 +1414,170 @@ buildClassify('fe-opgame', 'fe-opscore', [
   { label: 'Goal', prompt: 'Hide all test% accounts from a report', options: [opt('NOT LIKE', true), opt('NOT IN'), opt('LIKE'), opt('BETWEEN')], why: "NOT LIKE 'test%' — exclude rows matching the pattern." }
 ]);
 
+// ============ MODULE 6: AGGREGATION & GROUPING ============
+const employees = [
+  { emp_id: 1, employee_name: 'Alice', project: 'Alpha', years_experience: 3, hours_logged: 100, role: 'Developer' },
+  { emp_id: 2, employee_name: 'Bob', project: 'Alpha', years_experience: 5, hours_logged: 120, role: 'QA' },
+  { emp_id: 3, employee_name: 'Carol', project: 'Alpha', years_experience: 7, hours_logged: 105, role: 'Developer' },
+  { emp_id: 4, employee_name: 'Dave', project: 'Alpha', years_experience: null, hours_logged: 0, role: 'Manager' },
+  { emp_id: 5, employee_name: 'Eve', project: 'Beta', years_experience: 2, hours_logged: 80, role: 'Manager' },
+  { emp_id: 6, employee_name: 'Frank', project: 'Beta', years_experience: 3, hours_logged: 110, role: 'Developer' },
+  { emp_id: 7, employee_name: 'Grace', project: 'Beta', years_experience: 4, hours_logged: 130, role: 'Developer' },
+  { emp_id: 8, employee_name: 'Hank', project: 'Beta', years_experience: 3, hours_logged: null, role: 'Developer' },
+  { emp_id: 9, employee_name: 'Heidi', project: 'Gamma', years_experience: 5, hours_logged: 150, role: 'Developer' },
+  { emp_id: 10, employee_name: 'Ivan', project: 'Gamma', years_experience: 6, hours_logged: 140, role: 'QA' }
+];
+const registrations = [
+  { reg_id: 1, user_name: 'Aisha', email: 'aisha@example.com', event: 'TechFest', ticket_type: 'Paid', referrer: 'Instagram' },
+  { reg_id: 2, user_name: 'Rohan', email: 'rohan@example.com', event: 'TechFest', ticket_type: 'Free', referrer: null },
+  { reg_id: 3, user_name: 'Aisha', email: 'aisha@example.com', event: 'CodeCamp', ticket_type: 'Paid', referrer: 'Instagram' },
+  { reg_id: 4, user_name: 'Mohit', email: null, event: 'TechFest', ticket_type: 'Free', referrer: 'LinkedIn' },
+  { reg_id: 5, user_name: 'Neha', email: 'neha@example.com', event: 'CodeCamp', ticket_type: 'Free', referrer: 'Instagram' },
+  { reg_id: 6, user_name: null, email: 'unknown@example.com', event: 'DesignCon', ticket_type: 'Paid', referrer: 'Twitter' },
+  { reg_id: 7, user_name: 'Aisha', email: 'aisha@example.com', event: 'TechFest', ticket_type: 'Paid', referrer: 'Instagram' },
+  { reg_id: 8, user_name: 'Vishal', email: null, event: 'DesignCon', ticket_type: 'Free', referrer: null },
+  { reg_id: 9, user_name: 'Rohan', email: 'rohan@example.com', event: 'TechFest', ticket_type: 'Free', referrer: 'Instagram' },
+  { reg_id: 10, user_name: 'Aisha', email: 'aisha@example.com', event: 'CodeCamp', ticket_type: 'Paid', referrer: null }
+];
+
+const empSource = document.getElementById('emp-source');
+if (empSource) empSource.innerHTML = uTable(employees, ['emp_id', 'employee_name', 'project', 'years_experience', 'hours_logged', 'role']);
+const regSource = document.getElementById('reg-source');
+if (regSource) regSource.innerHTML = uTable(registrations, ['reg_id', 'user_name', 'email', 'event', 'ticket_type', 'referrer']);
+
+const AGG_SQL = { count: 'COUNT(*)', sum_hours: 'SUM(hours_logged)', avg_exp: 'AVG(years_experience)', min_exp: 'MIN(years_experience)', max_exp: 'MAX(years_experience)' };
+const AGG_LABEL = { count: 'count', sum_hours: 'total_hours', avg_exp: 'avg_experience', min_exp: 'min_experience', max_exp: 'max_experience' };
+function aggValue(rows, type) {
+  if (type === 'count') return rows.length;
+  if (type === 'sum_hours') return rows.reduce((s, r) => s + (r.hours_logged == null ? 0 : r.hours_logged), 0);
+  const v = rows.map(r => r.years_experience).filter(x => x != null);
+  if (!v.length) return null;
+  if (type === 'avg_exp') return parseFloat((v.reduce((a, b) => a + b, 0) / v.length).toFixed(2));
+  if (type === 'min_exp') return Math.min(...v);
+  if (type === 'max_exp') return Math.max(...v);
+  return null;
+}
+function groupRows(rows, cols) {
+  const map = new Map();
+  rows.forEach(r => {
+    const key = cols.map(c => r[c]).join(' | ');
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  });
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1]);
+}
+
+// --- GROUP BY playground ---
+const gbGroup = document.getElementById('gb-group');
+if (gbGroup) {
+  const gbAgg = document.getElementById('gb-agg');
+  const gbOut = document.getElementById('gb-out');
+  const gbRes = document.getElementById('gb-res');
+  function runGroup() {
+    const cols = gbGroup.value.split(',');
+    const agg = gbAgg.value;
+    const buckets = groupRows(employees, cols);
+    const rows = buckets.map(grp => {
+      const obj = {};
+      cols.forEach(c => obj[c] = grp[0][c]);
+      if (agg !== 'none') obj.__agg = aggValue(grp, agg);
+      return obj;
+    });
+    const outCols = agg !== 'none' ? [...cols, '__agg'] : cols;
+    const sel = agg !== 'none' ? `${cols.join(', ')}, ${AGG_SQL[agg]} AS ${AGG_LABEL[agg]}` : cols.join(', ');
+    gbOut.textContent = `SELECT ${sel}\nFROM employees\nGROUP BY ${cols.join(', ')};`;
+    gbRes.innerHTML = uTable(rows, outCols, { __agg: agg !== 'none' ? AGG_LABEL[agg] : '' });
+  }
+  gbGroup.addEventListener('change', runGroup);
+  gbAgg.addEventListener('change', runGroup);
+  runGroup();
+}
+
+// --- COUNT playground ---
+const ctMode = document.getElementById('ct-mode');
+if (ctMode) {
+  const ctGroup = document.getElementById('ct-group');
+  const ctOut = document.getElementById('ct-out');
+  const ctRes = document.getElementById('ct-res');
+  const CT_SQL = { star: 'COUNT(*)', email: 'COUNT(email)', distinct_user: 'COUNT(DISTINCT user_name)', distinct_email: 'COUNT(DISTINCT email)' };
+  let ctG = 'none';
+  function countOf(rows, mode) {
+    if (mode === 'star') return rows.length;
+    if (mode === 'email') return rows.filter(r => r.email != null).length;
+    if (mode === 'distinct_user') return new Set(rows.filter(r => r.user_name != null).map(r => r.user_name)).size;
+    if (mode === 'distinct_email') return new Set(rows.filter(r => r.email != null).map(r => r.email)).size;
+    return 0;
+  }
+  function runCount() {
+    const mode = ctMode.value;
+    if (ctG === 'event') {
+      ctOut.textContent = `SELECT event, ${CT_SQL[mode]} AS result\nFROM registrations\nGROUP BY event;`;
+      const buckets = groupRows(registrations, ['event']);
+      const rows = buckets.map(grp => ({ event: grp[0].event, result: countOf(grp, mode) }));
+      ctRes.innerHTML = uTable(rows, ['event', 'result']);
+    } else {
+      ctOut.textContent = `SELECT ${CT_SQL[mode]} AS result\nFROM registrations;`;
+      ctRes.innerHTML = uTable([{ result: countOf(registrations, mode) }], ['result']);
+    }
+  }
+  ctGroup.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    ctGroup.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    ctG = b.dataset.g; runCount();
+  }));
+  ctMode.addEventListener('change', runCount);
+  runCount();
+}
+
+// --- HAVING playground ---
+const hvRun = document.getElementById('hv-run');
+if (hvRun) {
+  const hvAgg = document.getElementById('hv-agg');
+  const hvOp = document.getElementById('hv-op');
+  const hvVal = document.getElementById('hv-val');
+  const hvOut = document.getElementById('hv-out');
+  const hvRes = document.getElementById('hv-res');
+  function cmp(a, op, b) { switch (op) { case '>': return a > b; case '>=': return a >= b; case '<': return a < b; case '<=': return a <= b; } return false; }
+  function runHaving() {
+    const agg = hvAgg.value, op = hvOp.value, thr = parseFloat(hvVal.value);
+    hvOut.textContent = `SELECT project, ${AGG_SQL[agg]} AS ${AGG_LABEL[agg]}\nFROM employees\nGROUP BY project\nHAVING ${AGG_SQL[agg]} ${op} ${hvVal.value};`;
+    const buckets = groupRows(employees, ['project']);
+    let kept = 0;
+    let h = '<table class="rt"><thead><tr><th></th><th>project</th><th>' + AGG_LABEL[agg] + '</th></tr></thead><tbody>';
+    buckets.forEach(grp => {
+      const val = aggValue(grp, agg);
+      const ok = val != null && cmp(val, op, thr);
+      if (ok) kept++;
+      h += `<tr class="${ok ? 'row-pass' : 'row-fail'}"><td>${ok ? '✓' : '✗'}</td><td>${grp[0].project}</td><td>${uCell(val)}</td></tr>`;
+    });
+    h += '</tbody></table>';
+    hvRes.innerHTML = h + `<div class="rt-count">${kept} of ${buckets.length} groups kept.</div>`;
+  }
+  hvAgg.addEventListener('change', runHaving);
+  hvOp.addEventListener('change', runHaving);
+  hvRun.addEventListener('click', runHaving);
+  hvVal.addEventListener('keydown', e => { if (e.key === 'Enter') runHaving(); });
+  runHaving();
+}
+
+// --- WHERE or HAVING game ---
+buildClassify('wh-game', 'wh-score', [
+  { label: 'Filter', prompt: "keep only rows where role = 'Developer'", options: [opt('WHERE', true), opt('HAVING')], why: "WHERE — it filters individual rows before grouping." },
+  { label: 'Filter', prompt: "keep projects whose SUM(hours) > 300", options: [opt('WHERE'), opt('HAVING', true)], why: "HAVING — the condition uses an aggregate, computed after grouping." },
+  { label: 'Filter', prompt: "keep only Paid tickets", options: [opt('WHERE', true), opt('HAVING')], why: "WHERE — a plain row condition, no aggregate." },
+  { label: 'Filter', prompt: "keep events with COUNT(*) > 3", options: [opt('WHERE'), opt('HAVING', true)], why: "HAVING — filtering on a per-group count." },
+  { label: 'Filter', prompt: "keep teams whose AVG(experience) >= 4", options: [opt('WHERE'), opt('HAVING', true)], why: "HAVING — average is an aggregate." },
+  { label: 'Filter', prompt: "drop rows signed up before 2025", options: [opt('WHERE', true), opt('HAVING')], why: "WHERE — row-level date filter, runs before grouping." }
+]);
+
+// --- Predict the aggregate result ---
+buildClassify('agg-predict', 'agg-predict-score', [
+  { label: 'Result?', prompt: 'SELECT COUNT(*) FROM registrations;', code: true, options: [optN(8), optN(10, true), optN(5), optN(9)], why: "10 — COUNT(*) counts every row, NULLs included." },
+  { label: 'Result?', prompt: 'SELECT COUNT(email) FROM registrations;', code: true, options: [optN(10), optN(8, true), optN(6), optN(9)], why: "8 — two emails are NULL (reg 4 and 8), skipped." },
+  { label: 'Result?', prompt: 'SELECT COUNT(DISTINCT user_name) FROM registrations;', code: true, options: [optN(5, true), optN(6), optN(10), optN(4)], why: "5 — Aisha, Rohan, Mohit, Neha, Vishal (NULL name ignored)." },
+  { label: 'Result?', prompt: "SELECT SUM(hours_logged) FROM employees WHERE project = 'Alpha';", code: true, options: [optN(325, true), optN(425), optN(300), optN(220)], why: "325 — 100+120+105+0 (Dave's 0 counts)." },
+  { label: 'Groups kept?', prompt: '… GROUP BY event HAVING COUNT(*) > 3;', code: true, options: [optN(1, true), optN(2), optN(3), optN(0)], why: "1 — only TechFest has more than 3 registrations (it has 5)." }
+]);
+
 // ============ QUERY LIFECYCLE ANIMATION ============
 const lifeBtn = document.getElementById('run-lifecycle');
 if (lifeBtn) {

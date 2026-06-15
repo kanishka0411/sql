@@ -1664,6 +1664,171 @@ WHERE last_purchase_inr BETWEEN 400 AND 800;</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 6: AGGREGATION & GROUPING ==================== -->
+<section class="lesson" id="aggregation" data-title="Aggregation & grouping">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 6</div>
+    <h1>Aggregation &amp; grouping</h1>
+    <p class="lede">Stop reading rows one by one. Bucket them, then summarize: GROUP BY, SUM/AVG/MIN/MAX, COUNT, and HAVING.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#ag-group">GROUP BY &amp; aggregates</a>
+    <a href="#ag-count">COUNT</a>
+    <a href="#ag-having">HAVING</a>
+    <a href="#ag-predict">Predict game</a>
+  </nav>
+
+  <!-- GROUP BY & aggregates -->
+  <div class="subsection" id="ag-group">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>GROUP BY &amp; aggregates</h2></div>
+
+    <div class="card">
+      <h3>The bucket model</h3>
+      <p class="muted">Picture a pile of balls. <code>GROUP BY color</code> drops them into buckets by colour. Then an aggregate (count, sum, average…) runs <em>inside each bucket</em> and returns one row per bucket.</p>
+      <div class="exec-order">
+        <span class="exec-step">FROM</span><span class="exec-sep">→</span>
+        <span class="exec-step">WHERE <em>filter rows</em></span><span class="exec-sep">→</span>
+        <span class="exec-step">GROUP BY <em>make buckets</em></span><span class="exec-sep">→</span>
+        <span class="exec-step">aggregate</span><span class="exec-sep">→</span>
+        <span class="exec-step">HAVING <em>filter buckets</em></span><span class="exec-sep">→</span>
+        <span class="exec-step">SELECT</span><span class="exec-sep">→</span>
+        <span class="exec-step">ORDER BY</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>The <code>employees</code> table</h3>
+      <p class="muted">10 employees across 3 projects. Note Dave's NULL experience and Hank's NULL hours.</p>
+      <div id="emp-source"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Group &amp; summarize</h3>
+      <p class="muted">Choose how to bucket the rows and what to compute in each bucket.</p>
+      <div class="control-row">
+        <span class="muted">GROUP BY</span>
+        <select id="gb-group">
+          <option value="project">project</option>
+          <option value="role">role</option>
+          <option value="project,role">project, role</option>
+        </select>
+        <span class="muted">compute</span>
+        <select id="gb-agg">
+          <option value="none">— (just the groups)</option>
+          <option value="count">COUNT(*)</option>
+          <option value="sum_hours">SUM(hours_logged)</option>
+          <option value="avg_exp">AVG(years_experience)</option>
+          <option value="min_exp">MIN(years_experience)</option>
+          <option value="max_exp">MAX(years_experience)</option>
+        </select>
+      </div>
+      <pre class="code" id="gb-out"></pre>
+      <div id="gb-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>NULL vs 0 in averages:</strong> aggregates skip NULLs but count zeros. <code>AVG(hours_logged)</code> for Alpha = (100+120+105+0)/4 = <strong>81.25</strong> — Dave's 0 drags it down. If Dave's hours were NULL instead, he'd be skipped and the average would be higher.</div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> you can only SELECT columns that are in GROUP BY or wrapped in an aggregate — <code>SELECT employee_name … GROUP BY project</code> fails (which name?). Don't group by a primary key (every bucket holds one row). <code>SUM/AVG</code> need numbers; <code>MIN/MAX</code> also work on text (alphabetical).</div>
+    </div>
+  </div>
+
+  <!-- COUNT -->
+  <div class="subsection" id="ag-count">
+    <div class="sub-head"><div class="sub-tag">Counting · Playground</div><h2>COUNT — four flavours</h2></div>
+
+    <div class="card">
+      <h3>The <code>registrations</code> table</h3>
+      <p class="muted">10 sign-ups. Some have NULL names or emails; Aisha registers several times.</p>
+      <div id="reg-source"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Count it different ways</h3>
+      <p class="muted">Same table, very different answers depending on what (and how) you count.</p>
+      <div class="control-row">
+        <select id="ct-mode">
+          <option value="star">COUNT(*)</option>
+          <option value="email">COUNT(email)</option>
+          <option value="distinct_user">COUNT(DISTINCT user_name)</option>
+          <option value="distinct_email">COUNT(DISTINCT email)</option>
+        </select>
+        <div class="logic-pick" id="ct-group">
+          <button class="fbtn on" data-g="none">whole table</button>
+          <button class="fbtn" data-g="event">GROUP BY event</button>
+        </div>
+      </div>
+      <pre class="code" id="ct-out"></pre>
+      <div id="ct-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Which COUNT?</strong> <code>COUNT(*)</code> = total volume (counts every row, NULLs included). <code>COUNT(col)</code> = data completeness (skips NULLs). <code>COUNT(DISTINCT col)</code> = true audience size (skips NULLs <em>and</em> duplicates). DISTINCT is slower on huge tables.</div>
+    </div>
+  </div>
+
+  <!-- HAVING -->
+  <div class="subsection" id="ag-having">
+    <div class="sub-head"><div class="sub-tag">Filter groups · Playground</div><h2>HAVING — filter the buckets</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>WHERE</code> filters rows <em>before</em> grouping; <code>HAVING</code> filters buckets <em>after</em> the math. That's why <code>WHERE SUM(...) &gt; 100</code> fails — the sum doesn't exist yet at the WHERE step.</p>
+      <div class="control-row">
+        <span class="muted">per project, keep where</span>
+        <select id="hv-agg">
+          <option value="sum_hours">SUM(hours_logged)</option>
+          <option value="avg_exp">AVG(years_experience)</option>
+          <option value="count">COUNT(*)</option>
+          <option value="min_exp">MIN(years_experience)</option>
+        </select>
+        <select id="hv-op">
+          <option value=">">&gt;</option>
+          <option value=">=">&gt;=</option>
+          <option value="<">&lt;</option>
+          <option value="<=">&lt;=</option>
+        </select>
+        <input class="qinput" id="hv-val" type="number" value="300" style="min-width:100px;">
+        <button class="btn btn-primary" id="hv-run">▶ Run</button>
+      </div>
+      <pre class="code" id="hv-out"></pre>
+      <div id="hv-res"></div>
+      <p class="muted" style="margin-top:8px;">✓ = bucket kept, ✗ = bucket filtered out by HAVING.</p>
+    </div>
+
+    <div class="card">
+      <h3>🎮 WHERE or HAVING?</h3>
+      <p class="muted">For each filter, decide where it belongs.</p>
+      <div id="wh-game"></div>
+      <div id="wh-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <!-- Predict game -->
+  <div class="subsection" id="ag-predict">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Predict the result</h2></div>
+
+    <div class="card">
+      <h3>🎮 What does each query return?</h3>
+      <p class="muted">Read the aggregate query and pick the answer.</p>
+      <div id="agg-predict"></div>
+      <div id="agg-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="aggregation">
+      <span>Mark Aggregation &amp; grouping complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
