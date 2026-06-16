@@ -1578,6 +1578,159 @@ buildClassify('agg-predict', 'agg-predict-score', [
   { label: 'Groups kept?', prompt: '… GROUP BY event HAVING COUNT(*) > 3;', code: true, options: [optN(1, true), optN(2), optN(3), optN(0)], why: "1 — only TechFest has more than 3 registrations (it has 5)." }
 ]);
 
+// ============ MODULE 7: NUMERIC & NULL FUNCTIONS ============
+const nfStudents = [
+  { id: 1, name: 'Aisha', city: 'Delhi', phone: null, fee_paid: 2804.45, score_change: -12.25, test1: 55, test2: 60, test3: 58 },
+  { id: 2, name: 'Rohan', city: 'Mumbai', phone: '', fee_paid: 3303.06, score_change: -80.00, test1: 40, test2: null, test3: 52 },
+  { id: 3, name: 'Meenal', city: null, phone: '8888000004', fee_paid: 7999.00, score_change: null, test1: null, test2: null, test3: 35 },
+  { id: 4, name: 'Arjun', city: 'Pune', phone: '9777000005', fee_paid: 3717.94, score_change: 10.00, test1: 72, test2: 70, test3: 75 },
+  { id: 5, name: 'Neha', city: 'Jaipur', phone: null, fee_paid: 3499.00, score_change: -30.75, test1: 10, test2: 15, test3: 12 },
+  { id: 6, name: 'Vikas', city: 'Hyderabad', phone: '9666000007', fee_paid: 5099.00, score_change: 120.75, test1: 88, test2: 91, test3: 95 },
+  { id: 7, name: 'Sana', city: 'Ahmedabad', phone: null, fee_paid: 7085.13, score_change: -15.00, test1: 65, test2: 64, test3: null },
+  { id: 8, name: 'Imran', city: 'Kolkata', phone: '', fee_paid: 3303.06, score_change: -1.00, test1: 50, test2: 49, test3: 51 },
+  { id: 9, name: 'Pallavi', city: '', phone: '9555000010', fee_paid: 3303.06, score_change: 5.25, test1: 92, test2: 90, test3: 91 },
+  { id: 10, name: 'Deepak', city: 'Chennai', phone: null, fee_paid: null, score_change: -22.00, test1: 33, test2: 40, test3: 38 },
+  { id: 11, name: 'Ananya', city: 'Bengaluru', phone: '9444000012', fee_paid: 3504.16, score_change: 18.50, test1: 78, test2: null, test3: null },
+  { id: 12, name: 'Tanya', city: 'Kolkata', phone: '', fee_paid: 3303.06, score_change: -10.00, test1: 45, test2: 42, test3: 48 }
+];
+const coalesceDemo = [
+  { id: 1, primary_email: 'aisha@company.com', work_email: null, personal_email: 'aisha@gmail.com', hours_logged: 5.0, default_hours: 0.0 },
+  { id: 2, primary_email: null, work_email: 'rohan@company.com', personal_email: null, hours_logged: null, default_hours: 0.0 },
+  { id: 3, primary_email: null, work_email: null, personal_email: 'meera@yahoo.com', hours_logged: 2.5, default_hours: 0.0 },
+  { id: 4, primary_email: null, work_email: null, personal_email: null, hours_logged: null, default_hours: 0.0 },
+  { id: 5, primary_email: '', work_email: null, personal_email: 'raj@gmail.com', hours_logged: 5.0, default_hours: 0.0 }
+];
+
+const studentsSource = document.getElementById('students-source');
+if (studentsSource) studentsSource.innerHTML = uTable(nfStudents, ['id', 'name', 'city', 'phone', 'fee_paid', 'score_change', 'test1', 'test2', 'test3']);
+const coalesceSource = document.getElementById('coalesce-source');
+if (coalesceSource) coalesceSource.innerHTML = uTable(coalesceDemo, ['id', 'primary_email', 'work_email', 'personal_email', 'hours_logged', 'default_hours']);
+
+// --- ROUND & ABS ---
+const rdFn = document.getElementById('rd-fn');
+if (rdFn) {
+  const rdDec = document.getElementById('rd-dec');
+  const rdDecVal = document.getElementById('rd-dec-val');
+  const rdDecWrap = document.getElementById('rd-dec-wrap');
+  const rdOut = document.getElementById('rd-out');
+  const rdRes = document.getElementById('rd-res');
+  function roundTo(x, d) { if (x == null) return null; const f = Math.pow(10, d); return Math.round(x * f) / f; }
+  function runRound() {
+    const fn = rdFn.value;
+    rdDecWrap.style.display = fn === 'round' ? '' : 'none';
+    if (fn === 'round') {
+      const d = +rdDec.value;
+      rdOut.textContent = `SELECT id, name, fee_paid, ROUND(fee_paid, ${d}) AS rounded\nFROM students ORDER BY id;`;
+      const rows = nfStudents.map(r => ({ id: r.id, name: r.name, fee_paid: r.fee_paid, rounded: roundTo(r.fee_paid, d) }));
+      rdRes.innerHTML = uTable(rows, ['id', 'name', 'fee_paid', 'rounded']);
+    } else {
+      rdOut.textContent = `SELECT id, name, score_change, ABS(score_change) AS abs_value\nFROM students ORDER BY id;`;
+      const rows = nfStudents.map(r => ({ id: r.id, name: r.name, score_change: r.score_change, abs_value: r.score_change == null ? null : Math.abs(r.score_change) }));
+      rdRes.innerHTML = uTable(rows, ['id', 'name', 'score_change', 'abs_value']);
+    }
+  }
+  rdFn.addEventListener('change', runRound);
+  rdDec.addEventListener('input', () => { rdDecVal.textContent = rdDec.value; runRound(); });
+  runRound();
+}
+
+// --- GREATEST & LEAST ---
+const glMode = document.getElementById('gl-mode');
+if (glMode) {
+  const glFix = document.getElementById('gl-fix');
+  const glOut = document.getElementById('gl-out');
+  const glRes = document.getElementById('gl-res');
+  let gMode = 'greatest';
+  function runGL() {
+    const fix = glFix.checked;
+    const fnSql = gMode === 'greatest' ? 'GREATEST' : 'LEAST';
+    const args = fix ? "IFNULL(test1,0), IFNULL(test2,0), IFNULL(test3,0)" : 'test1, test2, test3';
+    glOut.textContent = `SELECT id, name, test1, test2, test3,\n  ${fnSql}(${args}) AS result\nFROM students ORDER BY id;`;
+    const rows = nfStudents.map(r => {
+      let vals = [r.test1, r.test2, r.test3];
+      let result;
+      if (fix) { vals = vals.map(v => v == null ? 0 : v); result = gMode === 'greatest' ? Math.max(...vals) : Math.min(...vals); }
+      else if (vals.some(v => v == null)) result = null;
+      else result = gMode === 'greatest' ? Math.max(...vals) : Math.min(...vals);
+      return { id: r.id, name: r.name, test1: r.test1, test2: r.test2, test3: r.test3, result };
+    });
+    glRes.innerHTML = uTable(rows, ['id', 'name', 'test1', 'test2', 'test3', 'result']);
+  }
+  glMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    glMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    gMode = b.dataset.m; runGL();
+  }));
+  glFix.addEventListener('change', runGL);
+  runGL();
+}
+
+// --- IFNULL & NULLIF ---
+const ifNullif = document.getElementById('if-nullif');
+if (ifNullif) {
+  const ifRepl = document.getElementById('if-repl');
+  const ifOut = document.getElementById('if-out');
+  const ifRes = document.getElementById('if-res');
+  function runIf() {
+    const useNullif = ifNullif.checked;
+    const repl = ifRepl.value;
+    ifOut.textContent = useNullif
+      ? `SELECT id, name, phone,\n  IFNULL(NULLIF(phone, ''), '${repl}') AS result\nFROM students;`
+      : `SELECT id, name, phone,\n  IFNULL(phone, '${repl}') AS result\nFROM students;`;
+    const rows = nfStudents.map(r => {
+      let p = r.phone;
+      if (useNullif && p === '') p = null;
+      return { id: r.id, name: r.name, phone: r.phone, result: (p == null ? repl : p) };
+    });
+    ifRes.innerHTML = uTable(rows, ['id', 'name', 'phone', 'result']);
+  }
+  ifNullif.addEventListener('change', runIf);
+  ifRepl.addEventListener('input', runIf);
+  runIf();
+}
+
+// --- COALESCE ---
+const coCols = document.getElementById('co-cols');
+if (coCols) {
+  const coDefault = document.getElementById('co-default');
+  const coClean = document.getElementById('co-clean');
+  const coOut = document.getElementById('co-out');
+  const coRes = document.getElementById('co-res');
+  const ORDER = ['primary_email', 'work_email', 'personal_email'];
+  function runCoalesce() {
+    const chosen = ORDER.filter(c => coCols.querySelector(`input[value="${c}"]`).checked);
+    const clean = coClean.checked;
+    const def = coDefault.value.trim();
+    const args = chosen.map(c => (clean && c === 'primary_email') ? `NULLIF(TRIM(${c}), '')` : c);
+    if (def) args.push(`'${def}'`);
+    coOut.textContent = `SELECT id,\n  COALESCE(${args.join(', ')}) AS contact_email\nFROM coalesce_demo;`;
+    const rows = coalesceDemo.map(r => {
+      let pick = null;
+      for (const c of chosen) {
+        let v = r[c];
+        if (clean && c === 'primary_email') v = (v == null || String(v).trim() === '') ? null : v;
+        if (v != null) { pick = v; break; }
+      }
+      if (pick == null && def) pick = def;
+      return { id: r.id, primary_email: r.primary_email, work_email: r.work_email, personal_email: r.personal_email, contact_email: pick };
+    });
+    coRes.innerHTML = uTable(rows, ['id', 'primary_email', 'work_email', 'personal_email', 'contact_email']);
+  }
+  coCols.addEventListener('change', runCoalesce);
+  coDefault.addEventListener('input', runCoalesce);
+  coClean.addEventListener('change', runCoalesce);
+  runCoalesce();
+}
+
+// --- which tool game ---
+buildClassify('nf-toolgame', 'nf-toolscore', [
+  { label: 'Goal', prompt: 'Filter to rows where city is missing', options: [opt('IS NULL', true), opt('IFNULL'), opt('COALESCE'), opt('NULLIF')], why: "IS NULL — used in WHERE to keep rows with no value." },
+  { label: 'Goal', prompt: "Show 'Not Provided' instead of a NULL phone", options: [opt('IFNULL', true), opt('IS NULL'), opt('NULLIF'), opt('IS NOT NULL')], why: "IFNULL(phone, 'Not Provided') — one backup value." },
+  { label: 'Goal', prompt: 'Pick the first email that exists from 3 columns', options: [opt('COALESCE', true), opt('IFNULL'), opt('GREATEST'), opt('IS NULL')], why: "COALESCE — returns the first non-NULL from a list." },
+  { label: 'Goal', prompt: "Turn an empty string '' into NULL", options: [opt('NULLIF', true), opt('IFNULL'), opt('COALESCE'), opt('IS NULL')], why: "NULLIF(col, '') — returns NULL when the value equals ''." },
+  { label: 'Goal', prompt: 'Keep only rows that DO have a phone', options: [opt('IS NOT NULL', true), opt('IS NULL'), opt('IFNULL'), opt('NULLIF')], why: "IS NOT NULL — filter to rows where the value is present." },
+  { label: 'Goal', prompt: 'Replace NULL hours with 0 before summing many columns', options: [opt('COALESCE', true), opt('IS NULL'), opt('NULLIF'), opt('GREATEST')], why: "COALESCE(hours, 0) — safe math, avoids NULL poisoning the sum." }
+]);
+
 // ============ QUERY LIFECYCLE ANIMATION ============
 const lifeBtn = document.getElementById('run-lifecycle');
 if (lifeBtn) {

@@ -1829,6 +1829,159 @@ WHERE last_purchase_inr BETWEEN 400 AND 800;</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 7: NUMERIC & NULL FUNCTIONS ==================== -->
+<section class="lesson" id="functions" data-title="Numeric & NULL functions">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 7</div>
+    <h1>Numeric &amp; NULL functions</h1>
+    <p class="lede">Reshape values per row: round and absolute, pick the biggest/smallest across columns, and tame missing data with IFNULL, NULLIF, and COALESCE.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#nf-round">ROUND &amp; ABS</a>
+    <a href="#nf-greatest">GREATEST / LEAST</a>
+    <a href="#nf-ifnull">IFNULL &amp; NULLIF</a>
+    <a href="#nf-coalesce">COALESCE</a>
+    <a href="#nf-game">Which tool?</a>
+  </nav>
+
+  <div class="card">
+    <h3>The <code>students</code> table</h3>
+    <p class="muted">Note the messy <code>phone</code> (NULL vs empty), and NULLs in fees, scores, and tests.</p>
+    <div id="students-source"></div>
+  </div>
+
+  <!-- ROUND & ABS -->
+  <div class="subsection" id="nf-round">
+    <div class="sub-head"><div class="sub-tag">Math · Playground</div><h2>ROUND &amp; ABS</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>ROUND(n, d)</code> rounds to <code>d</code> decimals — and <code>d</code> can be negative (round to tens, hundreds). <code>ABS(n)</code> drops the sign. NULL stays NULL for both.</p>
+      <div class="control-row">
+        <select id="rd-fn">
+          <option value="round">ROUND(fee_paid, d)</option>
+          <option value="abs">ABS(score_change)</option>
+        </select>
+        <span id="rd-dec-wrap" class="control-row" style="margin:0;gap:8px;">
+          <span class="muted">decimals (d)</span>
+          <input type="range" min="-2" max="2" value="0" id="rd-dec" class="slider" style="width:130px;">
+          <span id="rd-dec-val" style="font-weight:600;">0</span>
+        </span>
+      </div>
+      <pre class="code" id="rd-out"></pre>
+      <div id="rd-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Handy facts:</strong> <code>ROUND(fee, -2)</code> rounds to the nearest 100 (2804.45 → 2800). <code>ABS</code> is great for "size of change regardless of direction" — <code>WHERE ABS(score_change) &gt; 20</code> finds the biggest swings up or down. To cut decimals without rounding, use <code>TRUNCATE</code> / <code>FLOOR</code> instead.</div>
+    </div>
+  </div>
+
+  <!-- GREATEST & LEAST -->
+  <div class="subsection" id="nf-greatest">
+    <div class="sub-head"><div class="sub-tag">Across columns · Playground</div><h2>GREATEST / LEAST</h2></div>
+
+    <div class="card">
+      <p class="muted">Unlike MAX/MIN (which work down a column), these work <em>across</em> a row. If <strong>any</strong> value is NULL, the result is NULL — toggle the fix to see why.</p>
+      <div class="control-row">
+        <div class="logic-pick" id="gl-mode">
+          <button class="fbtn on" data-m="greatest">GREATEST</button>
+          <button class="fbtn" data-m="least">LEAST</button>
+        </div>
+        <label class="logic-not"><input type="checkbox" id="gl-fix"> wrap each test in <code>IFNULL(…, 0)</code></label>
+      </div>
+      <pre class="code" id="gl-out"></pre>
+      <div id="gl-res"></div>
+    </div>
+  </div>
+
+  <!-- IFNULL & NULLIF -->
+  <div class="subsection" id="nf-ifnull">
+    <div class="sub-head"><div class="sub-tag">Replace · Playground</div><h2>IFNULL &amp; NULLIF</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>IFNULL(col, x)</code> swaps a NULL for <code>x</code> — but it does <em>not</em> catch empty strings. Toggle <code>NULLIF(phone, '')</code> to fold '' into NULL first, then watch Rohan/Imran/Tanya get caught too.</p>
+      <div class="control-row">
+        <label class="logic-not"><input type="checkbox" id="if-nullif"> add <code>NULLIF(phone, '')</code></label>
+        <span class="muted">replacement:</span>
+        <input class="qinput" id="if-repl" type="text" value="Not Provided" style="min-width:160px;">
+      </div>
+      <pre class="code" id="if-out"></pre>
+      <div id="if-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>NULL ≠ '':</strong> <code>IFNULL</code> only replaces true NULLs. Empty string means "data exists but is blank", so it slips through. The combo <code>IFNULL(NULLIF(phone, ''), 'Missing')</code> handles both. And <code>IFNULL</code> changes the output, not the rows — to hide them you still need <code>WHERE … IS NOT NULL</code>.</div>
+    </div>
+  </div>
+
+  <!-- COALESCE -->
+  <div class="subsection" id="nf-coalesce">
+    <div class="sub-head"><div class="sub-tag">Fallback chain · Playground</div><h2>COALESCE</h2></div>
+
+    <div class="card">
+      <h3>The <code>coalesce_demo</code> table</h3>
+      <p class="muted">Three email columns with NULLs (and one empty string). COALESCE returns the first non-NULL.</p>
+      <div id="coalesce-source"></div>
+    </div>
+
+    <div class="card">
+      <p class="muted">Build a priority chain. Toggle the columns and order matters left-to-right. Add a default for when all are missing.</p>
+      <div class="col-toggles" id="co-cols">
+        <label><input type="checkbox" value="primary_email" checked> primary_email</label>
+        <label><input type="checkbox" value="work_email" checked> work_email</label>
+        <label><input type="checkbox" value="personal_email" checked> personal_email</label>
+      </div>
+      <div class="control-row">
+        <span class="muted">default (optional):</span>
+        <input class="qinput" id="co-default" type="text" value="" placeholder="e.g. hello@tuf" style="min-width:160px;">
+        <label class="logic-not"><input type="checkbox" id="co-clean"> clean primary with <code>NULLIF(TRIM(…), '')</code></label>
+      </div>
+      <pre class="code" id="co-out"></pre>
+      <div id="co-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>COALESCE vs IFNULL:</strong> <code>IFNULL</code> takes exactly 2 args (value + one backup). <code>COALESCE</code> takes an unlimited list and returns the first non-NULL — perfect for fallback chains and safe math like <code>COALESCE(hours, 0) + COALESCE(bonus, 0)</code>. Like IFNULL, it treats <code>''</code> as a real value unless you NULLIF it first.</div>
+    </div>
+  </div>
+
+  <!-- Which tool game -->
+  <div class="subsection" id="nf-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>IS NULL vs IFNULL vs COALESCE vs NULLIF</h2></div>
+
+    <div class="card">
+      <h3>Quick reference</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th>Tool</th><th>Does</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td><code>IS NULL</code> / <code>IS NOT NULL</code></td><td>Tests if a value is missing / present</td><td>WHERE (filter rows)</td></tr>
+          <tr><td><code>IFNULL(col, x)</code></td><td>Replaces NULL with one backup value</td><td>SELECT (clean output)</td></tr>
+          <tr><td><code>COALESCE(a, b, …)</code></td><td>Returns the first non-NULL from a list</td><td>SELECT (clean output)</td></tr>
+          <tr><td><code>NULLIF(a, b)</code></td><td>Returns NULL if a = b (e.g. turn '' into NULL)</td><td>SELECT (pre-clean)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Pick the right tool</h3>
+      <p class="muted">For each goal, tap the function you'd reach for.</p>
+      <div id="nf-toolgame"></div>
+      <div id="nf-toolscore" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="functions">
+      <span>Mark Numeric &amp; NULL functions complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
