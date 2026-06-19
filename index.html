@@ -1982,6 +1982,151 @@ WHERE last_purchase_inr BETWEEN 400 AND 800;</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 8: CASE & CONDITIONAL LOGIC ==================== -->
+<section class="lesson" id="case" data-title="CASE & conditional logic">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 8</div>
+    <h1>CASE &amp; conditional logic</h1>
+    <p class="lede">SQL's if/else. Checked top to bottom, returns the first match (or ELSE, or NULL). From simple labels to the pro "conditional aggregation" pivot trick.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#cs-basics">CASE basics</a>
+    <a href="#cs-verdict">Boolean &amp; bonus</a>
+    <a href="#cs-pivot">Conditional aggregation</a>
+    <a href="#cs-game">Predict game</a>
+  </nav>
+
+  <div class="card">
+    <h3>The shape of a CASE</h3>
+    <pre class="code">CASE
+  WHEN condition1 THEN value1     -- checked first
+  WHEN condition2 THEN value2     -- then this
+  ELSE fallback_value             -- optional; NULL if omitted
+END AS label                      -- must close with END</pre>
+    <table class="comparison-tbl">
+      <thead><tr><th>Type</th><th>Matches</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td>Searched CASE</td><td>Boolean conditions (&gt;, &lt;, BETWEEN, IS NULL)</td><td>Thresholds, ranges, validations</td></tr>
+        <tr><td>Simple CASE</td><td>Equality against fixed values (= 'P')</td><td>Direct code → label mapping</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- CASE basics -->
+  <div class="subsection" id="cs-basics">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>Classify with CASE</h2></div>
+
+    <div class="card">
+      <h3>The <code>products</code> table</h3>
+      <div id="products-source"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Price classifier — drag the thresholds</h3>
+      <p class="muted">Move the cut-offs and watch every product re-label live. NULL price → "Missing Price".</p>
+      <div class="control-row">
+        <span class="muted">Budget ≤</span>
+        <input type="range" min="5" max="60" value="20" id="pc-budget" class="slider" style="width:130px;">
+        <span id="pc-budget-val" style="font-weight:600;">20</span>
+        <span class="muted">· Premium &gt;</span>
+        <input type="range" min="60" max="200" value="100" id="pc-prem" class="slider" style="width:130px;">
+        <span id="pc-prem-val" style="font-weight:600;">100</span>
+      </div>
+      <pre class="code" id="pc-out"></pre>
+      <div id="pc-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Top-down priority:</strong> SQL stops at the first true WHEN, so put the most specific rules first. Every CASE must close with <code>END</code>. Omit <code>ELSE</code> and unmatched rows become NULL. All THEN results should be the same data type.</div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Searched or Simple?</h3>
+      <p class="muted">Ranges and IS NULL → Searched. Mapping fixed codes → Simple.</p>
+      <div id="ss-game"></div>
+      <div id="ss-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <!-- Boolean & bonus -->
+  <div class="subsection" id="cs-verdict">
+    <div class="sub-head"><div class="sub-tag">Decisions · Playground</div><h2>Boolean verdicts &amp; bonus tiers</h2></div>
+
+    <div class="card">
+      <h3>🎮 PASS / FAIL threshold</h3>
+      <p class="muted">The <code>rules</code> table. Slide the pass mark; NULL stays "Missing".</p>
+      <div class="control-row">
+        <span class="muted">PASS if value ≥</span>
+        <input type="range" min="0" max="100" value="40" id="vd-thresh" class="slider" style="width:160px;">
+        <span id="vd-thresh-val" style="font-weight:600;">40</span>
+      </div>
+      <pre class="code" id="vd-out"></pre>
+      <div id="vd-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>CASE + COALESCE: tiered bonus</h3>
+      <p class="muted">NULL score → bonus 0 (via COALESCE), ≥90 → 20%, ≥75 → 10%, else 5%.</p>
+      <pre class="code">CASE
+  WHEN COALESCE(performance_score, -1) = -1 THEN 0
+  WHEN performance_score >= 90 THEN salary * 0.20
+  WHEN performance_score >= 75 THEN salary * 0.10
+  ELSE salary * 0.05
+END AS bonus_amount</pre>
+      <div id="bonus-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>NULL comparison logic:</strong> <code>NULL = NULL</code> is <em>UNKNOWN</em>, not true — so <code>WHEN value = NULL</code> never fires. Use <code>IS NULL</code>, or MySQL's null-safe <code>&lt;=&gt;</code>, or wrap with <code>COALESCE</code> as above. That's why the bonus rule uses <code>COALESCE(score, -1) = -1</code> to catch missing scores.</div>
+    </div>
+  </div>
+
+  <!-- Conditional aggregation -->
+  <div class="subsection" id="cs-pivot">
+    <div class="sub-head"><div class="sub-tag">Pro trick · Playground</div><h2>Conditional aggregation (pivoting)</h2></div>
+
+    <div class="card">
+      <p class="muted">Put CASE <em>inside</em> SUM/COUNT to turn many rows into one side-by-side summary row — exactly how dashboards show "Revenue India vs USA" together. Pick a pivot:</p>
+      <select id="pv-pick" style="margin-bottom:12px;">
+        <option value="apples">Apples vs Oranges sold (SUM CASE)</option>
+        <option value="passfail">Pass vs Fail counts (COUNT CASE)</option>
+        <option value="insta">Paid registrations from Instagram (SUM CASE)</option>
+        <option value="juniors">Juniors vs Seniors (COUNT CASE)</option>
+        <option value="nullpct">% of NULL quantities (SUM CASE / COUNT)</option>
+      </select>
+      <pre class="code" id="pv-out"></pre>
+      <div id="pv-res"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Common mistakes:</strong> inside <code>SUM(CASE …)</code> always add <code>ELSE 0</code> so no-match doesn't become NULL. <code>COUNT(CASE WHEN … THEN 1 END)</code> works because COUNT ignores the NULLs from unmatched rows. EXISTS-in-CASE (node classification) is powerful but slow on big tables.</div>
+    </div>
+  </div>
+
+  <!-- Predict game -->
+  <div class="subsection" id="cs-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Predict the CASE output</h2></div>
+
+    <div class="card">
+      <h3>🎮 What does CASE return?</h3>
+      <p class="muted">Read each rule set and the row, then pick the result.</p>
+      <div id="cs-predict"></div>
+      <div id="cs-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="case">
+      <span>Mark CASE &amp; conditional logic complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>

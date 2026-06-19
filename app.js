@@ -1731,6 +1731,167 @@ buildClassify('nf-toolgame', 'nf-toolscore', [
   { label: 'Goal', prompt: 'Replace NULL hours with 0 before summing many columns', options: [opt('COALESCE', true), opt('IS NULL'), opt('NULLIF'), opt('GREATEST')], why: "COALESCE(hours, 0) — safe math, avoids NULL poisoning the sum." }
 ]);
 
+// ============ MODULE 8: CASE & CONDITIONAL LOGIC ============
+const caseProducts = [
+  { product_id: 1, name: 'Laptop Sleeve', price: 18 }, { product_id: 2, name: 'Wireless Mouse', price: 32 },
+  { product_id: 3, name: 'Keyboard', price: 55 }, { product_id: 4, name: 'Monitor', price: 150 },
+  { product_id: 5, name: 'USB Cable', price: 8 }, { product_id: 6, name: 'Webcam', price: 60 },
+  { product_id: 7, name: 'HDMI Cable', price: 20 }, { product_id: 8, name: 'Mechanical Keyboard', price: 120 },
+  { product_id: 9, name: 'Sticker Pack', price: 0 }, { product_id: 10, name: 'Gift Card', price: 19 },
+  { product_id: 11, name: 'Mystery Box', price: null }, { product_id: 12, name: 'Refurb Monitor', price: 61 }
+];
+const caseRules = [
+  { rule_id: 1, value: 75 }, { rule_id: 2, value: 40 }, { rule_id: 3, value: 60 }, { rule_id: 4, value: null },
+  { rule_id: 5, value: 95 }, { rule_id: 6, value: 59 }, { rule_id: 7, value: 0 }, { rule_id: 8, value: 61 }
+];
+const caseBonus = [
+  { emp_id: 101, salary: 50000, performance_score: 90 }, { emp_id: 102, salary: 45000, performance_score: null },
+  { emp_id: 103, salary: 60000, performance_score: 74 }, { emp_id: 104, salary: 70000, performance_score: 75 },
+  { emp_id: 105, salary: 80000, performance_score: 89 }, { emp_id: 106, salary: 0, performance_score: 92 },
+  { emp_id: 107, salary: 52000, performance_score: 100 }, { emp_id: 108, salary: 50000, performance_score: 0 },
+  { emp_id: 109, salary: 45000, performance_score: 85 }, { emp_id: 110, salary: 40000, performance_score: null }
+];
+const caseSales = [
+  { item: 'apple', quantity: 10 }, { item: 'orange', quantity: 7 }, { item: 'apple', quantity: 5 },
+  { item: 'banana', quantity: 3 }, { item: 'mango', quantity: 2 }, { item: 'apple', quantity: null }, { item: 'orange', quantity: null }
+];
+
+const productsSource = document.getElementById('products-source');
+if (productsSource) productsSource.innerHTML = uTable(caseProducts, ['product_id', 'name', 'price']);
+
+// --- price classifier ---
+const pcBudget = document.getElementById('pc-budget');
+if (pcBudget) {
+  const pcPrem = document.getElementById('pc-prem');
+  const pcBudgetVal = document.getElementById('pc-budget-val');
+  const pcPremVal = document.getElementById('pc-prem-val');
+  const pcOut = document.getElementById('pc-out');
+  const pcRes = document.getElementById('pc-res');
+  const CAT_CLASS = { 'Budget': 'cat-budget', 'Mid Range': 'cat-mid', 'Premium': 'cat-premium', 'Missing Price': 'cat-missing' };
+  function classify(price, bMax, pMin) {
+    if (price == null) return 'Missing Price';
+    if (price <= bMax) return 'Budget';
+    if (price <= pMin) return 'Mid Range';
+    return 'Premium';
+  }
+  function runClassify() {
+    let bMax = +pcBudget.value, pMin = +pcPrem.value;
+    if (pMin <= bMax) pMin = bMax + 1;
+    pcBudgetVal.textContent = bMax; pcPremVal.textContent = pMin;
+    pcOut.textContent = `CASE\n  WHEN price IS NULL THEN 'Missing Price'\n  WHEN price <= ${bMax} THEN 'Budget'\n  WHEN price <= ${pMin} THEN 'Mid Range'\n  ELSE 'Premium'\nEND AS price_category`;
+    let h = '<table class="rt"><thead><tr><th>product_id</th><th>name</th><th>price</th><th>price_category</th></tr></thead><tbody>';
+    caseProducts.forEach(p => {
+      const cat = classify(p.price, bMax, pMin);
+      h += `<tr><td>${p.product_id}</td><td>${p.name}</td><td>${uCell(p.price)}</td><td><span class="cat-badge ${CAT_CLASS[cat]}">${cat}</span></td></tr>`;
+    });
+    h += '</tbody></table>';
+    pcRes.innerHTML = h;
+  }
+  pcBudget.addEventListener('input', runClassify);
+  pcPrem.addEventListener('input', runClassify);
+  runClassify();
+}
+
+// --- searched vs simple game ---
+buildClassify('ss-game', 'ss-score', [
+  { label: 'Logic', prompt: 'Label price ranges: ≤20 Budget, >100 Premium', options: [opt('Searched CASE', true), opt('Simple CASE')], why: "Searched — uses ranges (<, >)." },
+  { label: 'Logic', prompt: "Map status 'P' → Paid, 'D' → Delivered", options: [opt('Searched CASE'), opt('Simple CASE', true)], why: "Simple — equality against fixed codes." },
+  { label: 'Logic', prompt: 'PASS if score >= 40, else FAIL', options: [opt('Searched CASE', true), opt('Simple CASE')], why: "Searched — a threshold comparison." },
+  { label: 'Logic', prompt: "Translate grade 'A' → Excellent, 'B' → Good", options: [opt('Searched CASE'), opt('Simple CASE', true)], why: "Simple — direct code mapping." },
+  { label: 'Logic', prompt: 'Flag rows where price IS NULL', options: [opt('Searched CASE', true), opt('Simple CASE')], why: "Searched — IS NULL is a boolean condition." }
+]);
+
+// --- verdict threshold ---
+const vdThresh = document.getElementById('vd-thresh');
+if (vdThresh) {
+  const vdThreshVal = document.getElementById('vd-thresh-val');
+  const vdOut = document.getElementById('vd-out');
+  const vdRes = document.getElementById('vd-res');
+  function runVerdict() {
+    const t = +vdThresh.value;
+    vdThreshVal.textContent = t;
+    vdOut.textContent = `CASE\n  WHEN value IS NULL THEN 'Missing'\n  WHEN value >= ${t} THEN 'PASS'\n  ELSE 'FAIL'\nEND AS verdict`;
+    const rows = caseRules.map(r => ({ rule_id: r.rule_id, value: r.value, verdict: r.value == null ? 'Missing' : (r.value >= t ? 'PASS' : 'FAIL') }));
+    vdRes.innerHTML = uTable(rows, ['rule_id', 'value', 'verdict']);
+  }
+  vdThresh.addEventListener('input', runVerdict);
+  runVerdict();
+}
+
+// --- bonus table ---
+const bonusRes = document.getElementById('bonus-res');
+if (bonusRes) {
+  function bonusOf(salary, score) {
+    if (score == null) return 0;
+    if (score >= 90) return salary * 0.20;
+    if (score >= 75) return salary * 0.10;
+    return salary * 0.05;
+  }
+  const rows = caseBonus.map(e => ({ emp_id: e.emp_id, salary: e.salary, performance_score: e.performance_score, bonus_amount: bonusOf(e.salary, e.performance_score) }));
+  bonusRes.innerHTML = uTable(rows, ['emp_id', 'salary', 'performance_score', 'bonus_amount']);
+}
+
+// --- conditional aggregation pivot ---
+const pvPick = document.getElementById('pv-pick');
+if (pvPick) {
+  const pvOut = document.getElementById('pv-out');
+  const pvRes = document.getElementById('pv-res');
+  const PIVOTS = {
+    apples: {
+      sql: "SELECT\n  SUM(CASE WHEN item='apple'  THEN COALESCE(quantity,0) ELSE 0 END) AS apples_sold,\n  SUM(CASE WHEN item='orange' THEN COALESCE(quantity,0) ELSE 0 END) AS oranges_sold\nFROM sales;",
+      run: () => {
+        const a = caseSales.filter(s => s.item === 'apple').reduce((t, s) => t + (s.quantity || 0), 0);
+        const o = caseSales.filter(s => s.item === 'orange').reduce((t, s) => t + (s.quantity || 0), 0);
+        return [{ apples_sold: a, oranges_sold: o }];
+      }, cols: ['apples_sold', 'oranges_sold']
+    },
+    passfail: {
+      sql: "SELECT\n  COUNT(CASE WHEN value >= 40 THEN 1 END) AS pass_count,\n  COUNT(CASE WHEN value < 40 THEN 1 END) AS fail_count\nFROM rules;",
+      run: () => {
+        const p = caseRules.filter(r => r.value != null && r.value >= 40).length;
+        const f = caseRules.filter(r => r.value != null && r.value < 40).length;
+        return [{ pass_count: p, fail_count: f }];
+      }, cols: ['pass_count', 'fail_count']
+    },
+    insta: {
+      sql: "SELECT\n  SUM(CASE WHEN ticket_type='Paid' AND referrer='Instagram' THEN 1 ELSE 0 END) AS insta_paid_total\nFROM registrations;",
+      run: () => [{ insta_paid_total: registrations.filter(r => r.ticket_type === 'Paid' && r.referrer === 'Instagram').length }],
+      cols: ['insta_paid_total']
+    },
+    juniors: {
+      sql: "SELECT\n  COUNT(CASE WHEN years_experience <= 3 THEN 1 END) AS juniors,\n  COUNT(CASE WHEN years_experience > 3 THEN 1 END) AS seniors\nFROM employees;",
+      run: () => {
+        const j = employees.filter(e => e.years_experience != null && e.years_experience <= 3).length;
+        const s = employees.filter(e => e.years_experience != null && e.years_experience > 3).length;
+        return [{ juniors: j, seniors: s }];
+      }, cols: ['juniors', 'seniors']
+    },
+    nullpct: {
+      sql: "SELECT\n  (SUM(CASE WHEN quantity IS NULL THEN 1 ELSE 0 END) / COUNT(*)) * 100 AS null_percentage\nFROM sales;",
+      run: () => {
+        const nulls = caseSales.filter(s => s.quantity == null).length;
+        return [{ null_percentage: parseFloat((nulls / caseSales.length * 100).toFixed(2)) }];
+      }, cols: ['null_percentage']
+    }
+  };
+  function runPivot() {
+    const p = PIVOTS[pvPick.value];
+    pvOut.textContent = p.sql;
+    pvRes.innerHTML = uTable(p.run(), p.cols);
+  }
+  pvPick.addEventListener('change', runPivot);
+  runPivot();
+}
+
+// --- predict the CASE output ---
+buildClassify('cs-predict', 'cs-predict-score', [
+  { label: 'price = 55', prompt: "WHEN price<=20 'Budget' / <=100 'Mid Range' / ELSE 'Premium'", options: [opt('Budget'), opt('Mid Range', true), opt('Premium'), opt('Missing Price')], why: "55 is > 20 and ≤ 100 → Mid Range." },
+  { label: 'price = NULL', prompt: "WHEN price IS NULL 'Missing Price' / …", options: [opt('Missing Price', true), opt('Budget'), opt('Premium'), opt('NULL')], why: "The first WHEN catches NULL → Missing Price." },
+  { label: 'value = 0', prompt: "WHEN IS NULL 'Missing' / >=40 'PASS' / ELSE 'FAIL'", options: [opt('PASS'), opt('FAIL', true), opt('Missing'), opt('0')], why: "0 is not NULL and < 40 → FAIL." },
+  { label: 'value = NULL', prompt: "WHEN IS NULL 'Missing' / >=40 'PASS' / ELSE 'FAIL'", options: [opt('Missing', true), opt('FAIL'), opt('PASS'), opt('0')], why: "NULL hits the first WHEN → Missing (note: value=NULL would never match)." },
+  { label: 'salary 50000, score 90', prompt: "score>=90 → salary*0.20", code: true, options: [optN(10000, true), optN(5000), optN(7500), optN(20000)], why: "50000 × 0.20 = 10000." }
+]);
+
 // ============ QUERY LIFECYCLE ANIMATION ============
 const lifeBtn = document.getElementById('run-lifecycle');
 if (lifeBtn) {

@@ -2876,6 +2876,18 @@ select:focus { outline: none; border-color: var(--accent); box-shadow: var(--sha
 }
 .wildcard-legend .fbtn { font-family: var(--font-mono); font-size: 12px; }
 
+.cat-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.cat-budget { background: var(--success-soft); color: var(--success); }
+.cat-mid { background: var(--warning-soft); color: var(--warning); }
+.cat-premium { background: var(--info-soft); color: var(--info); }
+.cat-missing { background: var(--surface-2); color: var(--text-soft); font-style: italic; }
+
 /* ========== ACCESSIBILITY ========== */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
