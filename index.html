@@ -2127,6 +2127,588 @@ END AS bonus_amount</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 9: STRING FUNCTIONS ==================== -->
+<section class="lesson" id="strings" data-title="String functions">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 9</div>
+    <h1>String functions</h1>
+    <p class="lede">Real text is messy — mixed case, accents, stray spaces. These functions normalize, slice, search, and join it. Type into any box and watch the output live.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#sf-collation">Collation</a>
+    <a href="#sf-concat">CONCAT</a>
+    <a href="#sf-lab">String lab</a>
+    <a href="#sf-slice">Slice &amp; search</a>
+    <a href="#sf-replace">REPLACE &amp; LIKE</a>
+    <a href="#sf-game">Predict game</a>
+  </nav>
+
+  <!-- Collation -->
+  <div class="subsection" id="sf-collation">
+    <div class="sub-head"><div class="sub-tag">Foundations · Playground</div><h2>Collation — when are two strings "equal"?</h2></div>
+
+    <div class="card">
+      <p class="muted">Collation decides comparison rules. Four flags you'll see in names like <code>utf8mb4_0900_ai_ci</code>:</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Flag</th><th>Meaning</th><th>café vs cafe / Apple vs apple</th></tr></thead>
+        <tbody>
+          <tr><td><code>ai</code></td><td>Accent-insensitive</td><td>café = cafe</td></tr>
+          <tr><td><code>as</code></td><td>Accent-sensitive</td><td>café ≠ cafe</td></tr>
+          <tr><td><code>ci</code></td><td>Case-insensitive</td><td>Apple = apple</td></tr>
+          <tr><td><code>cs</code></td><td>Case-sensitive</td><td>Apple ≠ apple</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Compare under different collations</h3>
+      <div class="control-row">
+        <input class="qinput" id="cl-a" type="text" value="Café" style="min-width:120px;">
+        <span class="muted">vs</span>
+        <input class="qinput" id="cl-b" type="text" value="cafe" style="min-width:120px;">
+        <label class="logic-not"><input type="checkbox" id="cl-cs"> case-sensitive (cs)</label>
+        <label class="logic-not"><input type="checkbox" id="cl-as"> accent-sensitive (as)</label>
+      </div>
+      <div id="cl-out" class="lifecycle-status"></div>
+    </div>
+  </div>
+
+  <!-- CONCAT -->
+  <div class="subsection" id="sf-concat">
+    <div class="sub-head"><div class="sub-tag">Joining · Playground</div><h2>CONCAT vs CONCAT_WS</h2></div>
+
+    <div class="card">
+      <h3>The <code>customers</code> table</h3>
+      <p class="muted">Neha and Aayush have no middle name (NULL). Watch what each function does.</p>
+      <div id="cust-source"></div>
+    </div>
+
+    <div class="card">
+      <p class="muted"><code>CONCAT</code> returns NULL if <em>any</em> argument is NULL (the NULL trap). <code>CONCAT_WS(sep, …)</code> sets the separator once and skips NULLs.</p>
+      <div class="control-row">
+        <div class="logic-pick" id="cc-mode">
+          <button class="fbtn on" data-m="concat">CONCAT</button>
+          <button class="fbtn" data-m="ws">CONCAT_WS</button>
+        </div>
+        <span class="muted">separator:</span>
+        <input class="qinput" id="cc-sep" type="text" value=" " style="min-width:80px;">
+      </div>
+      <pre class="code" id="cc-out"></pre>
+      <div id="cc-res"></div>
+    </div>
+  </div>
+
+  <!-- String lab -->
+  <div class="subsection" id="sf-lab">
+    <div class="sub-head"><div class="sub-tag">Type &amp; see · Playground</div><h2>String lab</h2></div>
+
+    <div class="card">
+      <p class="muted">Type anything — include spaces, an accent (é), or an emoji 😀 — and see every function applied at once. Brackets <code>[ ]</code> reveal where spaces are.</p>
+      <div class="control-row">
+        <input class="qinput" id="lab-in" type="text" value="  Café 😀  " style="min-width:280px;">
+      </div>
+      <div id="lab-out"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>LENGTH vs CHAR_LENGTH:</strong> <code>CHAR_LENGTH</code> counts characters (what humans see), <code>LENGTH</code> counts bytes. In UTF-8, English = 1 byte, é = 2 bytes, 😀 = 4 bytes. Use <code>CHAR_LENGTH</code> for password/length checks; <code>LENGTH</code> for storage limits. A row has special characters when <code>LENGTH &gt; CHAR_LENGTH</code>.</div>
+    </div>
+  </div>
+
+  <!-- Slice & search -->
+  <div class="subsection" id="sf-slice">
+    <div class="sub-head"><div class="sub-tag">Cut &amp; find · Playground</div><h2>LEFT / RIGHT / SUBSTRING &amp; LOCATE / INSTR</h2></div>
+
+    <div class="card">
+      <h3>🎮 Slice a string (1-based indexing)</h3>
+      <div class="control-row">
+        <input class="qinput" id="sl-in" type="text" value="plus_user" style="min-width:160px;">
+        <span class="muted">LEFT n</span><input class="qinput" id="sl-left" type="number" value="3" style="min-width:70px;">
+        <span class="muted">RIGHT n</span><input class="qinput" id="sl-right" type="number" value="4" style="min-width:70px;">
+        <span class="muted">SUBSTRING start</span><input class="qinput" id="sl-start" type="number" value="3" style="min-width:70px;">
+        <span class="muted">len</span><input class="qinput" id="sl-len" type="number" value="2" style="min-width:70px;">
+      </div>
+      <div id="sl-out"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Find a position</h3>
+      <p class="muted">Both return the 1-based position (0 if not found). Only the argument order differs: <code>LOCATE(needle, haystack)</code> vs <code>INSTR(haystack, needle)</code>.</p>
+      <div class="control-row">
+        <span class="muted">find</span>
+        <input class="qinput" id="se-sub" type="text" value="@" style="min-width:80px;">
+        <span class="muted">in</span>
+        <input class="qinput" id="se-str" type="text" value="Raj@gmail.com" style="min-width:200px;">
+      </div>
+      <div id="se-out" class="lifecycle-status"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Gotchas:</strong> SQL strings are 1-based — the first character is position 1, not 0. <code>0</code> from LOCATE/INSTR means "not found". <code>RIGHT(filename, 4)</code> is the easy way to grab a <code>.ext</code>. <code>SUBSTRING(code, 5, 4)</code> pulls a year out of <code>MKT-2023-001</code>.</div>
+    </div>
+  </div>
+
+  <!-- REPLACE & LIKE -->
+  <div class="subsection" id="sf-replace">
+    <div class="sub-head"><div class="sub-tag">Replace &amp; match · Playground</div><h2>REPLACE &amp; LIKE</h2></div>
+
+    <div class="card">
+      <h3>🎮 REPLACE every occurrence</h3>
+      <p class="muted">Swaps <em>all</em> matches (case-sensitive). Try a breadcrumb: replace <code>/</code> with <code> &gt; </code>.</p>
+      <div class="control-row">
+        <span class="muted">in</span>
+        <input class="qinput" id="rp-str" type="text" value="tuf.com/blog/sql-basics" style="min-width:220px;">
+        <span class="muted">replace</span>
+        <input class="qinput" id="rp-find" type="text" value="/" style="min-width:80px;">
+        <span class="muted">with</span>
+        <input class="qinput" id="rp-with" type="text" value=" > " style="min-width:80px;">
+      </div>
+      <pre class="code" id="rp-out"></pre>
+      <div id="rp-res" class="lifecycle-status"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>REPLACE gotchas:</strong> it's case-sensitive (<code>REPLACE('Apple','apple','X')</code> does nothing). It changes every occurrence — replacing <code>cat</code> in <code>category</code> gives <code>dogegory</code>. In a SELECT it only changes the <em>output</em>; use <code>UPDATE</code> to change stored data. NULL in → NULL out. Nest them: <code>REPLACE(REPLACE(url,'tuf.com','takeuforward.org'),'/',' &gt; ')</code>.</div>
+    </div>
+
+    <div class="card">
+      <h3>LIKE pattern matching — quick recap</h3>
+      <p class="muted"><code>%</code> = any length (0+), <code>_</code> = exactly one character. A comparison returns <code>1</code> (true) or <code>0</code> (false).</p>
+      <pre class="code">'plus_user'  LIKE 'plus%'      -- 1  (starts with plus)
+'plus1user'  LIKE 'plus_us_r'  -- 1  (each _ matches one char)
+'USR_8'      LIKE 'USR__'      -- 1  (one char after USR_)
+'USR_99'     LIKE 'USR__'      -- 0  (two chars after)
+'plus1user'  LIKE 'plus\_user' -- 0  (\_ = a literal underscore)</pre>
+      <p class="muted">There's a full live LIKE playground (type a pattern, watch rows match) in the <strong>Filtering essentials</strong> module.</p>
+    </div>
+  </div>
+
+  <!-- Predict game -->
+  <div class="subsection" id="sf-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Predict the output</h2></div>
+
+    <div class="card">
+      <h3>🎮 What does each call return?</h3>
+      <div id="sf-predict"></div>
+      <div id="sf-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="strings">
+      <span>Mark String functions complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ==================== MODULE 10: EDITING DATA & TABLES ==================== -->
+<section class="lesson" id="editing" data-title="Editing data & tables">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 10</div>
+    <h1>Editing data &amp; tables</h1>
+    <p class="lede">The write side of SQL: INSERT, UPDATE, DELETE, UPSERT, ALTER, TRUNCATE. Every panel below mutates one shared <code>employees</code> sandbox — break it, then hit Reset.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#ed-insert">INSERT</a>
+    <a href="#ed-upsert">UPSERT</a>
+    <a href="#ed-update">UPDATE</a>
+    <a href="#ed-delete">DELETE &amp; TRUNCATE</a>
+    <a href="#ed-alter">ALTER</a>
+    <a href="#ed-game">Command game</a>
+  </nav>
+
+  <!-- INSERT -->
+  <div class="subsection" id="ed-insert">
+    <div class="sub-head"><div class="sub-tag">Add rows · Sandbox</div><h2>INSERT</h2></div>
+
+    <div class="card">
+      <p class="muted">Add a row. <code>emp_id</code> is the primary key — a duplicate is rejected. Leave department blank to insert NULL.</p>
+      <div class="control-row">
+        <input class="qinput" id="ins-id" type="number" placeholder="emp_id" style="min-width:90px;">
+        <input class="qinput" id="ins-name" type="text" placeholder="name" style="min-width:140px;">
+        <input class="qinput" id="ins-dept" type="text" placeholder="department" style="min-width:120px;">
+        <input class="qinput" id="ins-sal" type="number" placeholder="salary" style="min-width:100px;">
+        <button class="btn btn-primary" id="ins-btn">▶ INSERT</button>
+        <button class="btn ed-reset">↻ Reset table</button>
+      </div>
+      <div id="ins-msg" class="lifecycle-status"></div>
+      <div class="sandbox-view" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>More INSERT moves:</strong> multiple rows — comma-separate value tuples. A quote in a name needs doubling: <code>'Kevin O''Brian'</code>. Use functions inline: <code>hire_date = CURRENT_DATE</code>. Copy from another table: <code>INSERT INTO employees (…) SELECT … FROM draft_hires;</code>. Always list columns — never rely on table order.</div>
+    </div>
+  </div>
+
+  <!-- UPSERT -->
+  <div class="subsection" id="ed-upsert">
+    <div class="sub-head"><div class="sub-tag">Insert-or-update · Sandbox</div><h2>UPSERT</h2></div>
+
+    <div class="card">
+      <p class="muted">"Insert if new, otherwise update." Needs a primary/unique key to detect the collision. Pick how a conflict is handled, then try an existing id (301) vs a new one.</p>
+      <div class="control-row">
+        <input class="qinput" id="up-id" type="number" value="301" style="min-width:90px;">
+        <input class="qinput" id="up-name" type="text" value="Raj Sharma" style="min-width:140px;">
+        <input class="qinput" id="up-dept" type="text" value="Eng" style="min-width:120px;">
+        <input class="qinput" id="up-sal" type="number" value="57000" style="min-width:100px;">
+      </div>
+      <div class="control-row">
+        <div class="logic-pick" id="up-mode">
+          <button class="fbtn on" data-m="update">ON DUPLICATE KEY UPDATE</button>
+          <button class="fbtn" data-m="ignore">INSERT IGNORE</button>
+        </div>
+        <button class="btn btn-primary" id="up-btn">▶ Run</button>
+        <button class="btn ed-reset">↻ Reset table</button>
+      </div>
+      <pre class="code" id="up-out"></pre>
+      <div id="up-msg" class="lifecycle-status"></div>
+      <div class="sandbox-view" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- UPDATE -->
+  <div class="subsection" id="ed-update">
+    <div class="sub-head"><div class="sub-tag">Change rows · Sandbox</div><h2>UPDATE — mind the WHERE</h2></div>
+
+    <div class="card">
+      <p class="muted">Set a column where a condition holds. Pick <strong>no WHERE</strong> to feel the "global update" danger — it hits every row.</p>
+      <div class="control-row">
+        <span class="muted">SET</span>
+        <select id="upd-col"><option value="department">department</option><option value="salary">salary</option><option value="is_active">is_active</option></select>
+        <span class="muted">=</span>
+        <input class="qinput" id="upd-val" type="text" value="HR" style="min-width:110px;">
+        <label class="logic-not"><input type="checkbox" id="upd-mul"> multiply (salary × value)</label>
+      </div>
+      <div class="control-row">
+        <select id="upd-where">
+          <option value="all">no WHERE — all rows ⚠</option>
+          <option value="id">WHERE emp_id =</option>
+          <option value="sallt">WHERE salary &lt;</option>
+          <option value="hire">WHERE hire_date &gt;=</option>
+        </select>
+        <input class="qinput" id="upd-wval" type="text" value="" placeholder="value" style="min-width:120px;">
+        <button class="btn btn-primary" id="upd-btn">▶ UPDATE</button>
+        <button class="btn ed-reset">↻ Reset table</button>
+      </div>
+      <pre class="code" id="upd-out"></pre>
+      <div id="upd-msg" class="lifecycle-status"></div>
+      <div class="sandbox-view" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- DELETE & TRUNCATE -->
+  <div class="subsection" id="ed-delete">
+    <div class="sub-head"><div class="sub-tag">Remove rows · Sandbox</div><h2>DELETE &amp; TRUNCATE</h2></div>
+
+    <div class="card">
+      <div class="control-row">
+        <select id="del-where">
+          <option value="id">WHERE emp_id =</option>
+          <option value="in">WHERE emp_id IN ( … )</option>
+          <option value="all">no WHERE — all rows ⚠</option>
+        </select>
+        <input class="qinput" id="del-val" type="text" value="305" placeholder="e.g. 305 or 301,302" style="min-width:150px;">
+        <button class="btn btn-danger" id="del-btn">▶ DELETE</button>
+        <button class="btn btn-danger" id="trunc-btn">⚡ TRUNCATE</button>
+        <button class="btn ed-reset">↻ Reset table</button>
+      </div>
+      <pre class="code" id="del-out"></pre>
+      <div id="del-msg" class="lifecycle-status"></div>
+      <div class="sandbox-view" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>DELETE vs TRUNCATE vs DROP</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>DELETE</th><th>TRUNCATE</th><th>DROP</th></tr></thead>
+        <tbody>
+          <tr><td>Removes</td><td>Selected (or all) rows</td><td>All rows</td><td>Entire table + structure</td></tr>
+          <tr><td>WHERE allowed?</td><td>Yes</td><td>No</td><td>No</td></tr>
+          <tr><td>Table remains?</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+          <tr><td>Speed</td><td>Slower (row-by-row)</td><td>Faster (bulk wipe)</td><td>Fast (drops object)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>🎮 The AUTO_INCREMENT difference</h3>
+      <p class="muted">Same goal — empty the table, then insert "Raj". But the next id depends on <em>how</em> you cleared it. Watch the counter.</p>
+      <div class="btn-row">
+        <button class="btn" id="ai-delete">DELETE all, then INSERT</button>
+        <button class="btn btn-danger" id="ai-truncate">TRUNCATE, then INSERT</button>
+        <button class="btn" id="ai-reset">↻ Reset</button>
+      </div>
+      <div id="ai-next" class="muted" style="margin-bottom:8px;"></div>
+      <div id="ai-table"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>DELETE safety &amp; nuance:</strong> <code>DELETE</code> is logged row-by-row, so it's slower but you can wrap it in a transaction and <code>ROLLBACK</code>. <code>TRUNCATE</code> resets the AUTO_INCREMENT counter to 1; DELETE keeps counting. Foreign keys enforce <em>referential integrity</em> — the DB blocks deleting a parent row that children reference, unless you use <code>ON DELETE CASCADE</code>. And deleting a non-existent row isn't an error — just "0 rows affected".</div>
+    </div>
+  </div>
+
+  <!-- ALTER -->
+  <div class="subsection" id="ed-alter">
+    <div class="sub-head"><div class="sub-tag">Change structure · Sandbox</div><h2>ALTER</h2></div>
+
+    <div class="card">
+      <p class="muted">Change the table's shape, not its rows. Add a column (NULL for existing rows), backfill it, then drop it.</p>
+      <div class="control-row">
+        <input class="qinput" id="alt-col" type="text" value="temp_check" placeholder="new column" style="min-width:140px;">
+        <button class="btn btn-primary" id="alt-add">ADD COLUMN</button>
+        <input class="qinput" id="alt-fill" type="text" value="10" placeholder="value" style="min-width:90px;">
+        <button class="btn" id="alt-backfill">Backfill (UPDATE)</button>
+        <button class="btn btn-danger" id="alt-drop">DROP COLUMN</button>
+        <button class="btn ed-reset">↻ Reset table</button>
+      </div>
+      <pre class="code" id="alt-out"></pre>
+      <div id="alt-msg" class="lifecycle-status"></div>
+      <div class="sandbox-view" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>CHANGE vs MODIFY:</strong> <code>MODIFY salary DECIMAL(12,2)</code> changes the type/constraints, keeps the name. <code>CHANGE salary monthly_salary DECIMAL(10,2)</code> also <em>renames</em> (name written twice, type re-stated). Use MODIFY unless you specifically need to rename — accidental renames with CHANGE cause real production bugs. Also: <code>RENAME TO employees_v2</code> renames the table.</div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>ALTER in the real world:</strong> <code>RENAME COLUMN hire_date TO joining_date</code> changes the name only — old queries break. New columns land at the end by default; MySQL's <code>AFTER colname</code> places them. Use <code>DROP COLUMN IF EXISTS</code> in cleanup scripts so they don't crash. On big tables ALTER can <em>lock</em> the table for minutes, so it's run during maintenance windows. Shrinking a type (<code>VARCHAR(100)→VARCHAR(10)</code>) can truncate existing data.</div>
+    </div>
+  </div>
+
+  <!-- Command game -->
+  <div class="subsection" id="ed-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Which command?</h2></div>
+
+    <div class="card">
+      <h3>🎮 Pick the right write operation</h3>
+      <div id="ed-cmdgame"></div>
+      <div id="ed-cmdscore" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="editing">
+      <span>Mark Editing data &amp; tables complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ==================== MODULE 11: MERGING QUERY RESULTS ==================== -->
+<section class="lesson" id="merging" data-title="Merging query results">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 11</div>
+    <h1>Merging query results</h1>
+    <p class="lede">Stack the rows of two SELECTs into one result. <code>UNION</code> removes duplicates; <code>UNION ALL</code> keeps them and is faster. There's no built-in intersection in older MySQL — so you build it with logic.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#mg-union">UNION</a>
+    <a href="#mg-all">UNION ALL</a>
+    <a href="#mg-vs">UNION vs UNION ALL</a>
+    <a href="#mg-inter">Intersection &amp; difference</a>
+    <a href="#mg-game">Capstone game</a>
+  </nav>
+
+  <div class="card">
+    <h3>What "merging" really means</h3>
+    <p class="muted">You are not appending table B to table A. You are creating <strong>one combined result set</strong>. SQL stacks the rows vertically — so both queries must line up.</p>
+    <table class="comparison-tbl">
+      <thead><tr><th>The 3 rules</th><th>What it means</th><th>If broken</th></tr></thead>
+      <tbody>
+        <tr><td>Same number of columns</td><td>2 columns can only merge with 2 columns</td><td>Query errors out</td></tr>
+        <tr><td>Compatible data types</td><td>Column 1 here ↔ column 1 there must match</td><td>Error or junk data</td></tr>
+        <tr><td>Matched by position</td><td>SQL aligns by order, <em>not</em> by name</td><td>Values land in the wrong column</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- UNION -->
+  <div class="subsection" id="mg-union">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>UNION — the unique master list</h2></div>
+
+    <div class="card">
+      <h3>The two office tables</h3>
+      <p class="muted">Two offices, two staff tables. <code>Neha Sharma</code> works in both.</p>
+      <div class="dual-source">
+        <div><div class="src-label">delhi_staff</div><div id="mg-delhi-src"></div></div>
+        <div><div class="src-label">mumbai_staff</div><div id="mg-mumbai-src"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Merge lab — watch duplicates appear &amp; vanish</h3>
+      <p class="muted">Flip between the two operators and choose which columns to merge. Rows SQL throws away are struck through.</p>
+      <div class="control-row">
+        <div class="seg" id="mg-mode">
+          <button class="seg-btn active" data-mode="union">UNION</button>
+          <button class="seg-btn" data-mode="all">UNION ALL</button>
+        </div>
+        <span class="muted">· Columns:</span>
+        <select id="mg-cols">
+          <option value="name">name</option>
+          <option value="name,role">name, role</option>
+        </select>
+      </div>
+      <pre class="code" id="mg-out"></pre>
+      <div id="mg-res"></div>
+      <div id="mg-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Duplicates = the whole row.</strong> SQL compares every selected column position-by-position, not just the name. With <code>name, role</code> selected, two people named "Neha Sharma" with <em>different</em> roles are <em>not</em> duplicates. Sort the final list with one <code>ORDER BY</code> at the very end — never inside an individual SELECT.</div>
+    </div>
+  </div>
+
+  <!-- UNION ALL -->
+  <div class="subsection" id="mg-all">
+    <div class="sub-head"><div class="sub-tag">Speed · Playground</div><h2>UNION ALL — keep every row</h2></div>
+
+    <div class="card">
+      <p class="muted">Sales come from two channels. To total revenue or count packages, every transaction must survive — even a repeated <code>Mouse</code>. <code>UNION ALL</code> just pastes the rows together: no sort, no compare, no filter.</p>
+      <div class="dual-source">
+        <div><div class="src-label">online_sales</div><div id="mg-online-src"></div></div>
+        <div><div class="src-label">shop_sales</div><div id="mg-shop-src"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Consolidate sales — and why the total breaks under UNION</h3>
+      <p class="muted">Same data, two operators. Notice the revenue total change when a real duplicate sale gets silently deleted.</p>
+      <div class="control-row">
+        <div class="seg" id="mg-rev-mode">
+          <button class="seg-btn active" data-mode="all">UNION ALL</button>
+          <button class="seg-btn" data-mode="union">UNION</button>
+        </div>
+      </div>
+      <pre class="code" id="mg-rev-out"></pre>
+      <div id="mg-rev-res"></div>
+      <div id="mg-rev-total" class="merge-total"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>UNION ALL is the professional default.</strong> Use it whenever duplicates are impossible (e.g. <code>orders_2023</code> + <code>orders_2024</code>) or meaningful (every sale, every log line). Reach for plain <code>UNION</code> only when you truly need a deduplicated list — its hidden sort is expensive on millions of rows.</div>
+    </div>
+  </div>
+
+  <!-- UNION vs UNION ALL -->
+  <div class="subsection" id="mg-vs">
+    <div class="sub-head"><div class="sub-tag">Decide · Reference</div><h2>UNION vs UNION ALL</h2></div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>UNION</th><th>UNION ALL</th></tr></thead>
+        <tbody>
+          <tr><td>Duplicate rows</td><td>Removed</td><td>Kept</td></tr>
+          <tr><td>Performance</td><td>Slower — sort + distinct</td><td>Faster — just append</td></tr>
+          <tr><td>Internal work</td><td>Sorts &amp; compares every row</td><td>No filtering at all</td></tr>
+          <tr><td>Best for</td><td>Unique list (mailing list)</td><td>Totals &amp; raw logs</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🃏</div>
+      <div><strong>The two stacks of exam papers.</strong> <code>UNION ALL</code> dumps the second stack on the first — one move. <code>UNION</code> checks each paper against the pile, sorts them, and throws out copies. With millions of papers, that sorting is the "hidden cost".</div>
+    </div>
+
+    <div class="card">
+      <h3>Decision matrix</h3>
+      <ol class="decision-list">
+        <li><strong>Are duplicates even possible?</strong> No → <code>UNION ALL</code> (faster, nothing to remove).</li>
+        <li><strong>Do you want to keep them?</strong> Yes → <code>UNION ALL</code> (e.g. counting sales). No → <code>UNION</code> (e.g. a contact list).</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Intersection & difference -->
+  <div class="subsection" id="mg-inter">
+    <div class="sub-head"><div class="sub-tag">Logic · Playground</div><h2>Intersection &amp; set difference</h2></div>
+
+    <div class="card">
+      <h3>The set explorer</h3>
+      <p class="muted">Two customer lists. Pick a set operation and watch which buckets it pulls from. <code>store_customers</code> = Raj, Neha, Sana · <code>online_customers</code> = Raj, Amit, Sana.</p>
+      <div class="control-row">
+        <select id="mg-set-op">
+          <option value="union">UNION — everyone, unique</option>
+          <option value="unionall">UNION ALL — everyone, with repeats</option>
+          <option value="intersect">INTERSECT — in both lists</option>
+          <option value="except_ab">EXCEPT (store − online) — store only</option>
+          <option value="except_ba">EXCEPT (online − store) — online only</option>
+        </select>
+      </div>
+      <div class="set-buckets" id="mg-set-buckets">
+        <div class="set-bucket" data-bucket="onlyA"><div class="set-bucket-title">Only store</div><div class="set-bucket-body" id="mg-bk-onlyA"></div></div>
+        <div class="set-bucket" data-bucket="both"><div class="set-bucket-title">Both ∩</div><div class="set-bucket-body" id="mg-bk-both"></div></div>
+        <div class="set-bucket" data-bucket="onlyB"><div class="set-bucket-title">Only online</div><div class="set-bucket-body" id="mg-bk-onlyB"></div></div>
+      </div>
+      <pre class="code" id="mg-set-out"></pre>
+      <div id="mg-set-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>Building INTERSECT by hand</h3>
+      <p class="muted">Older MySQL has no <code>INTERSECT</code>. The mindset: if SQL won't hand you a command, express it with logic. Stack both lists with <code>UNION ALL</code>, group, and keep anything that appears more than once.</p>
+      <pre class="code">SELECT customer_name
+FROM (
+    SELECT customer_name FROM store_customers
+    UNION ALL                      -- must be ALL, or counts collapse to 1
+    SELECT customer_name FROM online_customers
+) AS combined_list
+GROUP BY customer_name
+HAVING COUNT(*) > 1;               -- appeared in both → intersection</pre>
+      <ol class="decision-list">
+        <li><code>UNION ALL</code> → [Raj, Neha, Sana, Raj, Amit, Sana]</li>
+        <li><code>GROUP BY</code> → Raj (2), Neha (1), Sana (2), Amit (1)</li>
+        <li><code>HAVING COUNT(*) &gt; 1</code> → <strong>Raj, Sana</strong></li>
+      </ol>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>The classic trap:</strong> the manual method <em>must</em> use <code>UNION ALL</code>. Plain <code>UNION</code> dedupes first, so every count becomes 1 and the intersection silently returns nothing. For set difference ("in A but not B"), a <code>LEFT JOIN ... WHERE b.col IS NULL</code> does the job where <code>EXCEPT</code> / <code>MINUS</code> isn't available.</div>
+    </div>
+  </div>
+
+  <!-- Capstone game -->
+  <div class="subsection" id="mg-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Which operator &amp; what's the output?</h2></div>
+
+    <div class="card">
+      <h3>🎮 UNION or UNION ALL?</h3>
+      <p class="muted">Read each business goal and pick the right tool.</p>
+      <div id="mg-pick"></div>
+      <div id="mg-pick-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Predict the merged result</h3>
+      <p class="muted">Lists <strong>A = [X, Y]</strong> and <strong>B = [Y, Z]</strong> unless noted. How many rows come back?</p>
+      <div id="mg-predict"></div>
+      <div id="mg-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="merging">
+      <span>Mark Merging query results complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>

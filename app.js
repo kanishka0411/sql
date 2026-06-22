@@ -1892,6 +1892,430 @@ buildClassify('cs-predict', 'cs-predict-score', [
   { label: 'salary 50000, score 90', prompt: "score>=90 → salary*0.20", code: true, options: [optN(10000, true), optN(5000), optN(7500), optN(20000)], why: "50000 × 0.20 = 10000." }
 ]);
 
+// ============ MODULE 9: STRING FUNCTIONS ============
+function sfEsc(x) { return String(x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function sfStrip(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+const sfCustomers = [
+  { id: 1, first_name: 'Raj', middle_name: 'Kumar', last_name: 'Patel', city: 'Mumbai', country: 'India' },
+  { id: 2, first_name: 'Neha', middle_name: null, last_name: 'Gupta', city: 'Delhi', country: 'India' },
+  { id: 3, first_name: 'Aayush', middle_name: null, last_name: 'Sharma', city: null, country: 'India' }
+];
+
+// --- collation compare ---
+const clA = document.getElementById('cl-a');
+if (clA) {
+  const clB = document.getElementById('cl-b');
+  const clCs = document.getElementById('cl-cs');
+  const clAs = document.getElementById('cl-as');
+  const clOut = document.getElementById('cl-out');
+  function runCollation() {
+    let x = clA.value, y = clB.value;
+    if (!clCs.checked) { x = x.toLowerCase(); y = y.toLowerCase(); }
+    if (!clAs.checked) { x = sfStrip(x); y = sfStrip(y); }
+    const eq = x === y;
+    const name = `utf8mb4_0900_${clAs.checked ? 'as' : 'ai'}_${clCs.checked ? 'cs' : 'ci'}`;
+    clOut.innerHTML = `Under <code>${name}</code>: <strong style="color:var(--${eq ? 'success' : 'danger'})">${eq ? 'EQUAL' : 'NOT equal'}</strong>`;
+  }
+  [clA, clB, clCs, clAs].forEach(el => el.addEventListener('input', runCollation));
+  [clCs, clAs].forEach(el => el.addEventListener('change', runCollation));
+  runCollation();
+}
+
+// --- CONCAT / CONCAT_WS ---
+const ccMode = document.getElementById('cc-mode');
+if (ccMode) {
+  const ccSep = document.getElementById('cc-sep');
+  const ccOut = document.getElementById('cc-out');
+  const ccRes = document.getElementById('cc-res');
+  const custSource = document.getElementById('cust-source');
+  if (custSource) custSource.innerHTML = uTable(sfCustomers, ['id', 'first_name', 'middle_name', 'last_name', 'city']);
+  let ccM = 'concat';
+  function runConcat() {
+    const sep = ccSep.value;
+    ccOut.textContent = ccM === 'concat'
+      ? `SELECT id, CONCAT(first_name, '${sep}', middle_name, '${sep}', last_name) AS full_name FROM customers;`
+      : `SELECT id, CONCAT_WS('${sep}', first_name, middle_name, last_name) AS full_name FROM customers;`;
+    const rows = sfCustomers.map(c => {
+      let full;
+      if (ccM === 'concat') {
+        const parts = [c.first_name, sep, c.middle_name, sep, c.last_name];
+        full = parts.some(p => p == null) ? null : parts.join('');
+      } else {
+        full = [c.first_name, c.middle_name, c.last_name].filter(p => p != null).join(sep);
+      }
+      return { id: c.id, first_name: c.first_name, middle_name: c.middle_name, last_name: c.last_name, full_name: full };
+    });
+    ccRes.innerHTML = uTable(rows, ['id', 'first_name', 'middle_name', 'last_name', 'full_name']);
+  }
+  ccMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    ccMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    ccM = b.dataset.m; runConcat();
+  }));
+  ccSep.addEventListener('input', runConcat);
+  runConcat();
+}
+
+// --- string lab ---
+const labIn = document.getElementById('lab-in');
+if (labIn) {
+  const labOut = document.getElementById('lab-out');
+  function runLab() {
+    const s = labIn.value;
+    const rows = [
+      ['LOWER(s)', `[${s.toLowerCase()}]`],
+      ['UPPER(s)', `[${s.toUpperCase()}]`],
+      ['TRIM(s)', `[${s.trim()}]`],
+      ['LTRIM(s)', `[${s.replace(/^\s+/, '')}]`],
+      ['RTRIM(s)', `[${s.replace(/\s+$/, '')}]`],
+      ['CHAR_LENGTH(s)', String([...s].length)],
+      ['LENGTH(s) — bytes', String(new TextEncoder().encode(s).length)],
+      ["REPLACE(s, ' ', '_')", `[${s.split(' ').join('_')}]`]
+    ];
+    let h = '<table class="rt"><thead><tr><th>function</th><th>result</th></tr></thead><tbody>';
+    rows.forEach(r => h += `<tr><td class="mono">${r[0]}</td><td class="mono">${sfEsc(r[1])}</td></tr>`);
+    h += '</tbody></table>';
+    labOut.innerHTML = h;
+  }
+  labIn.addEventListener('input', runLab);
+  runLab();
+}
+
+// --- slice ---
+const slIn = document.getElementById('sl-in');
+if (slIn) {
+  const slLeft = document.getElementById('sl-left');
+  const slRight = document.getElementById('sl-right');
+  const slStart = document.getElementById('sl-start');
+  const slLen = document.getElementById('sl-len');
+  const slOut = document.getElementById('sl-out');
+  function runSlice() {
+    const arr = [...slIn.value];
+    const ln = Math.max(0, +slLeft.value || 0);
+    const rn = Math.max(0, +slRight.value || 0);
+    const st = +slStart.value || 1;
+    const len = +slLen.value || 0;
+    const left = arr.slice(0, ln).join('');
+    const right = rn === 0 ? '' : arr.slice(-rn).join('');
+    const subFull = st >= 1 ? arr.slice(st - 1).join('') : '';
+    const subLen = st >= 1 ? arr.slice(st - 1, st - 1 + len).join('') : '';
+    const rows = [
+      [`LEFT(s, ${ln})`, left],
+      [`RIGHT(s, ${rn})`, right],
+      [`SUBSTRING(s, ${st})`, subFull],
+      [`SUBSTRING(s, ${st}, ${len})`, subLen]
+    ];
+    let h = '<table class="rt"><thead><tr><th>call</th><th>result</th></tr></thead><tbody>';
+    rows.forEach(r => h += `<tr><td class="mono">${r[0]}</td><td class="mono">[${sfEsc(r[1])}]</td></tr>`);
+    h += '</tbody></table>';
+    slOut.innerHTML = h;
+  }
+  [slIn, slLeft, slRight, slStart, slLen].forEach(el => el.addEventListener('input', runSlice));
+  runSlice();
+}
+
+// --- search (LOCATE / INSTR) ---
+const seStr = document.getElementById('se-str');
+if (seStr) {
+  const seSub = document.getElementById('se-sub');
+  const seOut = document.getElementById('se-out');
+  function runSearch() {
+    const str = seStr.value, sub = seSub.value;
+    const i = sub === '' ? -1 : str.indexOf(sub);
+    const pos = i < 0 ? 0 : i + 1;
+    let highlighted = sfEsc(str);
+    if (pos > 0) highlighted = sfEsc(str.slice(0, i)) + '<span class="hl-pos">' + sfEsc(str.slice(i, i + sub.length)) + '</span>' + sfEsc(str.slice(i + sub.length));
+    seOut.innerHTML = `<code>LOCATE('${sfEsc(sub)}', str)</code> = <code>INSTR(str, '${sfEsc(sub)}')</code> = <strong>${pos}</strong>` +
+      (pos > 0 ? ` &nbsp;·&nbsp; <span class="mono">${highlighted}</span>` : ` &nbsp;·&nbsp; <span class="muted">not found (0)</span>`);
+  }
+  [seStr, seSub].forEach(el => el.addEventListener('input', runSearch));
+  runSearch();
+}
+
+// --- REPLACE ---
+const rpStr = document.getElementById('rp-str');
+if (rpStr) {
+  const rpFind = document.getElementById('rp-find');
+  const rpWith = document.getElementById('rp-with');
+  const rpOut = document.getElementById('rp-out');
+  const rpRes = document.getElementById('rp-res');
+  function runReplace() {
+    const s = rpStr.value, f = rpFind.value, w = rpWith.value;
+    const result = f === '' ? s : s.split(f).join(w);
+    rpOut.textContent = `REPLACE('${s}', '${f}', '${w}')`;
+    rpRes.innerHTML = `→ <span class="mono">${sfEsc(result)}</span>`;
+  }
+  [rpStr, rpFind, rpWith].forEach(el => el.addEventListener('input', runReplace));
+  runReplace();
+}
+
+// --- predict the output ---
+buildClassify('sf-predict', 'sf-predict-score', [
+  { label: 'Returns?', prompt: "LEFT('plus_user', 3)", code: true, options: [opt('plu', true), opt('plus'), opt('lus'), opt('user')], why: "First 3 characters → 'plu'." },
+  { label: 'Returns?', prompt: "RIGHT('plus_user', 4)", code: true, options: [opt('user', true), opt('_use'), opt('plus'), opt('ser')], why: "Last 4 characters → 'user'." },
+  { label: 'Returns?', prompt: "SUBSTRING('plus_user', 3, 2)", code: true, options: [opt('us', true), opt('lu'), opt('us_'), opt('ps')], why: "Start at position 3 (1-based), take 2 chars → 'us'." },
+  { label: 'Returns?', prompt: "LOCATE('@', 'Raj@gmail.com')", code: true, options: [optN(4, true), optN(3), optN(0), optN(5)], why: "@ is the 4th character (1-based)." },
+  { label: 'Returns?', prompt: "CHAR_LENGTH('😀')", code: true, options: [optN(1, true), optN(4), optN(2), optN(0)], why: "1 visible character (LENGTH would be 4 bytes)." },
+  { label: 'Returns?', prompt: "CONCAT('Hello', NULL, 'Raj')", code: true, options: [opt('NULL', true), opt('HelloRaj'), opt('Hello Raj'), opt('HelloNULLRaj')], why: "CONCAT returns NULL if any argument is NULL." },
+  { label: 'Returns?', prompt: "REPLACE('a_b_c', '_', '-')", code: true, options: [opt('a-b-c', true), opt('a_b_c'), opt('a-b_c'), opt('abc')], why: "Every '_' becomes '-' → 'a-b-c'." }
+]);
+
+// ============ MODULE 10: EDITING DATA & TABLES ============
+const ED_TODAY = '2026-06-13';
+const EMP_BASE = [
+  { emp_id: 301, name: 'Neha Sharma', department: 'Sales', salary: 55000, hire_date: '2024-03-11', is_active: true },
+  { emp_id: 302, name: 'Ishan Gupta', department: 'Engineering', salary: 110000, hire_date: '2023-08-20', is_active: true },
+  { emp_id: 303, name: 'Priya Singh', department: 'Support', salary: 45000, hire_date: '2024-07-01', is_active: true },
+  { emp_id: 304, name: 'Karan Joshi', department: 'Engineering', salary: 95000, hire_date: '2022-02-14', is_active: false },
+  { emp_id: 305, name: 'Meera Nair', department: '', salary: 50000, hire_date: '2025-03-01', is_active: true },
+  { emp_id: 306, name: 'Omar Farooq', department: null, salary: 62000, hire_date: '2025-04-18', is_active: true },
+  { emp_id: 307, name: 'Ananya Das', department: 'Finance', salary: 72000, hire_date: '2024-10-05', is_active: true }
+];
+const ED_BASE_COLS = ['emp_id', 'name', 'department', 'salary', 'hire_date', 'is_active'];
+let empCols = [...ED_BASE_COLS];
+let emp = [];
+
+function edCell(col, v) {
+  if (v === null || v === undefined) return '<span class="cell-null">NULL</span>';
+  if (v === '') return '<span class="cell-null">(empty)</span>';
+  if (col === 'is_active') return v ? 'TRUE' : 'FALSE';
+  if (col === 'salary') return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v;
+}
+function renderSandbox() {
+  let h;
+  if (!emp.length) {
+    h = '<div class="muted" style="padding:10px 0;">No rows — the table is empty (structure intact).</div>';
+  } else {
+    h = '<table class="rt"><thead><tr>' + empCols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+    emp.forEach(r => { h += '<tr>' + empCols.map(c => `<td>${edCell(c, r[c])}</td>`).join('') + '</tr>'; });
+    h += '</tbody></table>';
+  }
+  document.querySelectorAll('.sandbox-view').forEach(el => el.innerHTML = h);
+}
+function resetSandbox() {
+  empCols = [...ED_BASE_COLS];
+  emp = EMP_BASE.map(r => ({ ...r }));
+  renderSandbox();
+}
+const edSandboxExists = document.querySelector('.sandbox-view');
+if (edSandboxExists) {
+  resetSandbox();
+  document.querySelectorAll('.ed-reset').forEach(b => b.addEventListener('click', () => {
+    resetSandbox();
+    document.querySelectorAll('#ins-msg, #up-msg, #upd-msg, #del-msg, #alt-msg').forEach(m => { m.textContent = ''; });
+  }));
+
+  // INSERT
+  const insBtn = document.getElementById('ins-btn');
+  if (insBtn) {
+    const insMsg = document.getElementById('ins-msg');
+    insBtn.addEventListener('click', () => {
+      const id = parseInt(document.getElementById('ins-id').value, 10);
+      const name = document.getElementById('ins-name').value.trim();
+      const dept = document.getElementById('ins-dept').value;
+      const sal = parseFloat(document.getElementById('ins-sal').value);
+      if (!id || !name || isNaN(sal)) { insMsg.innerHTML = '<span style="color:var(--danger)">Need emp_id, name and salary.</span>'; return; }
+      if (emp.some(r => r.emp_id === id)) { insMsg.innerHTML = `<span style="color:var(--danger)">ERROR 1062: Duplicate entry '${id}' for key PRIMARY.</span>`; return; }
+      const row = {}; empCols.forEach(c => row[c] = null);
+      row.emp_id = id; row.name = name; row.department = dept.trim() === '' ? null : dept;
+      row.salary = sal; row.hire_date = ED_TODAY; row.is_active = true;
+      emp.push(row);
+      insMsg.innerHTML = `<span style="color:var(--success)">1 row inserted (emp_id ${id}).</span>`;
+      renderSandbox();
+    });
+  }
+
+  // UPSERT
+  const upBtn = document.getElementById('up-btn');
+  if (upBtn) {
+    const upMode = document.getElementById('up-mode');
+    const upMsg = document.getElementById('up-msg');
+    const upOut = document.getElementById('up-out');
+    let upM = 'update';
+    function paintUpsert() {
+      const id = document.getElementById('up-id').value, name = document.getElementById('up-name').value, dept = document.getElementById('up-dept').value, sal = document.getElementById('up-sal').value;
+      upOut.textContent = upM === 'update'
+        ? `INSERT INTO employees (emp_id, name, department, salary, hire_date)\nVALUES (${id}, '${name}', '${dept}', ${sal}, '${ED_TODAY}')\nON DUPLICATE KEY UPDATE name=VALUES(name), department=VALUES(department), salary=VALUES(salary);`
+        : `INSERT IGNORE INTO employees (emp_id, name, department, salary, hire_date)\nVALUES (${id}, '${name}', '${dept}', ${sal}, '${ED_TODAY}');`;
+    }
+    upMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+      upMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+      upM = b.dataset.m; paintUpsert();
+    }));
+    ['up-id', 'up-name', 'up-dept', 'up-sal'].forEach(i => document.getElementById(i).addEventListener('input', paintUpsert));
+    upBtn.addEventListener('click', () => {
+      const id = parseInt(document.getElementById('up-id').value, 10);
+      const name = document.getElementById('up-name').value, dept = document.getElementById('up-dept').value, sal = parseFloat(document.getElementById('up-sal').value);
+      const existing = emp.find(r => r.emp_id === id);
+      if (existing) {
+        if (upM === 'update') {
+          existing.name = name; existing.department = dept; existing.salary = sal;
+          upMsg.innerHTML = `<span style="color:var(--warning)">Conflict on ${id} → existing row UPDATED.</span>`;
+        } else {
+          upMsg.innerHTML = `<span style="color:var(--info)">Conflict on ${id} → IGNORED, nothing changed.</span>`;
+        }
+      } else {
+        const row = {}; empCols.forEach(c => row[c] = null);
+        row.emp_id = id; row.name = name; row.department = dept === '' ? null : dept; row.salary = sal; row.hire_date = ED_TODAY; row.is_active = true;
+        emp.push(row);
+        upMsg.innerHTML = `<span style="color:var(--success)">No conflict on ${id} → new row INSERTED.</span>`;
+      }
+      renderSandbox();
+    });
+    paintUpsert();
+  }
+
+  // UPDATE
+  const updBtn = document.getElementById('upd-btn');
+  if (updBtn) {
+    const updCol = document.getElementById('upd-col'), updVal = document.getElementById('upd-val'), updMul = document.getElementById('upd-mul');
+    const updWhere = document.getElementById('upd-where'), updWval = document.getElementById('upd-wval');
+    const updOut = document.getElementById('upd-out'), updMsg = document.getElementById('upd-msg');
+    function predicate() {
+      const w = updWhere.value, v = updWval.value;
+      if (w === 'all') return () => true;
+      if (w === 'id') return r => r.emp_id === parseInt(v, 10);
+      if (w === 'sallt') return r => r.salary < parseFloat(v);
+      if (w === 'hire') return r => r.hire_date >= v;
+      return () => false;
+    }
+    function whereSql() {
+      const w = updWhere.value, v = updWval.value;
+      if (w === 'all') return '';
+      if (w === 'id') return `\nWHERE emp_id = ${v}`;
+      if (w === 'sallt') return `\nWHERE salary < ${v}`;
+      if (w === 'hire') return `\nWHERE hire_date >= '${v}'`;
+      return '';
+    }
+    function paintUpd() {
+      const col = updCol.value, val = updVal.value;
+      const setExpr = (col === 'salary' && updMul.checked) ? `salary = salary * ${val}` : `${col} = ${col === 'salary' || col === 'is_active' ? val : `'${val}'`}`;
+      updOut.textContent = `UPDATE employees\nSET ${setExpr}${whereSql()};`;
+    }
+    updBtn.addEventListener('click', () => {
+      const col = updCol.value, val = updVal.value, pred = predicate();
+      let n = 0;
+      emp.forEach(r => {
+        if (!pred(r)) return;
+        if (col === 'salary' && updMul.checked) r.salary = Math.round(r.salary * parseFloat(val) * 100) / 100;
+        else if (col === 'salary') r.salary = parseFloat(val);
+        else if (col === 'is_active') r.is_active = (val === 'TRUE' || val === 'true' || val === '1');
+        else r[col] = val;
+        n++;
+      });
+      const warn = updWhere.value === 'all' ? ' <span style="color:var(--danger)">⚠ global update — every row changed!</span>' : '';
+      updMsg.innerHTML = `<span style="color:var(--success)">${n} row${n === 1 ? '' : 's'} updated.</span>${warn}`;
+      renderSandbox();
+    });
+    [updCol, updVal, updMul, updWhere, updWval].forEach(el => el.addEventListener('input', paintUpd));
+    [updCol, updWhere, updMul].forEach(el => el.addEventListener('change', paintUpd));
+    paintUpd();
+  }
+
+  // DELETE & TRUNCATE
+  const delBtn = document.getElementById('del-btn');
+  if (delBtn) {
+    const delWhere = document.getElementById('del-where'), delVal = document.getElementById('del-val');
+    const delOut = document.getElementById('del-out'), delMsg = document.getElementById('del-msg');
+    function paintDel() {
+      const w = delWhere.value, v = delVal.value;
+      delOut.textContent = w === 'all' ? 'DELETE FROM employees;'
+        : w === 'in' ? `DELETE FROM employees\nWHERE emp_id IN (${v});`
+        : `DELETE FROM employees\nWHERE emp_id = ${v};`;
+    }
+    delBtn.addEventListener('click', () => {
+      const w = delWhere.value, v = delVal.value;
+      const before = emp.length;
+      if (w === 'all') emp = [];
+      else if (w === 'in') { const ids = v.split(',').map(x => parseInt(x.trim(), 10)); emp = emp.filter(r => !ids.includes(r.emp_id)); }
+      else { const id = parseInt(v, 10); emp = emp.filter(r => r.emp_id !== id); }
+      const n = before - emp.length;
+      const warn = w === 'all' ? ' <span style="color:var(--danger)">⚠ all rows deleted!</span>' : '';
+      delMsg.innerHTML = `<span style="color:var(--success)">${n} row${n === 1 ? '' : 's'} deleted.</span>${warn}`;
+      renderSandbox();
+    });
+    document.getElementById('trunc-btn').addEventListener('click', () => {
+      emp = [];
+      delOut.textContent = 'TRUNCATE TABLE employees;';
+      delMsg.innerHTML = '<span style="color:var(--warning)">Table truncated — all rows wiped, structure kept.</span>';
+      renderSandbox();
+    });
+    [delWhere, delVal].forEach(el => el.addEventListener('input', paintDel));
+    delWhere.addEventListener('change', paintDel);
+    paintDel();
+  }
+
+  // ALTER
+  const altAdd = document.getElementById('alt-add');
+  if (altAdd) {
+    const altCol = document.getElementById('alt-col'), altFill = document.getElementById('alt-fill'), altOut = document.getElementById('alt-out'), altMsg = document.getElementById('alt-msg');
+    altAdd.addEventListener('click', () => {
+      const c = altCol.value.trim();
+      if (!c) return;
+      if (empCols.includes(c)) { altMsg.innerHTML = `<span style="color:var(--danger)">Column '${c}' already exists.</span>`; return; }
+      empCols.push(c); emp.forEach(r => r[c] = null);
+      altOut.textContent = `ALTER TABLE employees ADD COLUMN ${c} INT;`;
+      altMsg.innerHTML = `<span style="color:var(--success)">Column '${c}' added (NULL for existing rows).</span>`;
+      renderSandbox();
+    });
+    document.getElementById('alt-backfill').addEventListener('click', () => {
+      const c = altCol.value.trim(), v = altFill.value;
+      if (!empCols.includes(c) || ED_BASE_COLS.includes(c)) { altMsg.innerHTML = `<span style="color:var(--danger)">Add a custom column first.</span>`; return; }
+      emp.forEach(r => r[c] = v);
+      altOut.textContent = `UPDATE employees SET ${c} = ${v};`;
+      altMsg.innerHTML = `<span style="color:var(--success)">Backfilled '${c}' for ${emp.length} rows.</span>`;
+      renderSandbox();
+    });
+    document.getElementById('alt-drop').addEventListener('click', () => {
+      const c = altCol.value.trim();
+      if (ED_BASE_COLS.includes(c)) { altMsg.innerHTML = `<span style="color:var(--danger)">Won't drop a base column in this sandbox.</span>`; return; }
+      if (!empCols.includes(c)) { altMsg.innerHTML = `<span style="color:var(--danger)">No such column.</span>`; return; }
+      empCols = empCols.filter(x => x !== c); emp.forEach(r => delete r[c]);
+      altOut.textContent = `ALTER TABLE employees DROP COLUMN ${c};`;
+      altMsg.innerHTML = `<span style="color:var(--warning)">Column '${c}' dropped — its data is gone.</span>`;
+      renderSandbox();
+    });
+  }
+}
+
+// AUTO_INCREMENT demo
+const aiTable = document.getElementById('ai-table');
+if (aiTable) {
+  const AI_BASE = [{ id: 1, name: 'Aisha' }, { id: 2, name: 'Rohan' }, { id: 3, name: 'Meera' }];
+  const aiNextEl = document.getElementById('ai-next');
+  let aiRows = [], aiNext = 4;
+  function renderAI() {
+    aiTable.innerHTML = uTable(aiRows, ['id', 'name']);
+    aiNextEl.innerHTML = `next <code>AUTO_INCREMENT</code> = <strong>${aiNext}</strong>`;
+  }
+  function resetAI() { aiRows = AI_BASE.map(r => ({ ...r })); aiNext = 4; renderAI(); }
+  document.getElementById('ai-delete').addEventListener('click', () => {
+    aiRows = [];                       // DELETE keeps the counter
+    aiRows.push({ id: aiNext, name: 'Raj' });
+    aiNext++;
+    renderAI();
+  });
+  document.getElementById('ai-truncate').addEventListener('click', () => {
+    aiRows = []; aiNext = 1;           // TRUNCATE resets the counter
+    aiRows.push({ id: aiNext, name: 'Raj' });
+    aiNext++;
+    renderAI();
+  });
+  document.getElementById('ai-reset').addEventListener('click', resetAI);
+  resetAI();
+}
+
+// command game
+buildClassify('ed-cmdgame', 'ed-cmdscore', [
+  { label: 'Goal', prompt: "Remove employees in dept 'HR' (keep the rest)", options: [opt('DELETE … WHERE', true), opt('TRUNCATE'), opt('DROP'), opt('UPDATE')], why: "DELETE with a WHERE removes only matching rows." },
+  { label: 'Goal', prompt: 'Empty a test table fast, keep the structure', options: [opt('DELETE'), opt('TRUNCATE', true), opt('DROP'), opt('ALTER')], why: "TRUNCATE bulk-wipes all rows quickly; the table stays." },
+  { label: 'Goal', prompt: 'Remove the entire table — rows and structure', options: [opt('DELETE'), opt('TRUNCATE'), opt('DROP', true), opt('UPDATE')], why: "DROP deletes the whole table object." },
+  { label: 'Goal', prompt: "Insert if new, otherwise update the existing row", options: [opt('UPSERT (ON DUPLICATE KEY)', true), opt('INSERT'), opt('UPDATE'), opt('DELETE')], why: "UPSERT handles both in one atomic step." },
+  { label: 'Goal', prompt: 'Give everyone hired in 2024+ a 50% raise', options: [opt('UPDATE … WHERE', true), opt('ALTER'), opt('INSERT'), opt('TRUNCATE')], why: "UPDATE with a WHERE and salary = salary * 1.5." },
+  { label: 'Goal', prompt: 'Add a new column to the table', options: [opt('ALTER … ADD COLUMN', true), opt('UPDATE'), opt('INSERT'), opt('UPSERT')], why: "ALTER changes the table structure." }
+]);
+
 // ============ QUERY LIFECYCLE ANIMATION ============
 const lifeBtn = document.getElementById('run-lifecycle');
 if (lifeBtn) {
@@ -1921,3 +2345,184 @@ if (lifeBtn) {
     lifeRunning = false;
   });
 }
+
+// ============ MODULE 11: MERGING QUERY RESULTS ============
+const mgDelhi = [
+  { name: 'Raj Patel', role: 'Developer' },
+  { name: 'Neha Sharma', role: 'Manager' },
+  { name: 'Amit Kumar', role: 'QA' }
+];
+const mgMumbai = [
+  { name: 'Sana Khan', role: 'Developer' },
+  { name: 'Neha Sharma', role: 'Manager' },
+  { name: 'Rahul Mehta', role: 'Sales' }
+];
+const mgOnline = [
+  { item_name: 'Laptop', price: 50000 },
+  { item_name: 'Mouse', price: 500 },
+  { item_name: 'Keyboard', price: 1200 }
+];
+const mgShop = [
+  { item_name: 'Mouse', price: 500 },
+  { item_name: 'Monitor', price: 15000 }
+];
+
+// source tables
+const mgDelhiSrc = document.getElementById('mg-delhi-src');
+if (mgDelhiSrc) {
+  mgDelhiSrc.innerHTML = uTable(mgDelhi, ['name', 'role']);
+  document.getElementById('mg-mumbai-src').innerHTML = uTable(mgMumbai, ['name', 'role']);
+  document.getElementById('mg-online-src').innerHTML = uTable(mgOnline, ['item_name', 'price']);
+  document.getElementById('mg-shop-src').innerHTML = uTable(mgShop, ['item_name', 'price']);
+}
+
+// --- merge lab ---
+const mgModeSeg = document.getElementById('mg-mode');
+if (mgModeSeg) {
+  const mgCols = document.getElementById('mg-cols');
+  const mgOut = document.getElementById('mg-out');
+  const mgRes = document.getElementById('mg-res');
+  const mgNote = document.getElementById('mg-note');
+  let mgMode = 'union';
+  function runMerge() {
+    const cols = mgCols.value.split(',');
+    const combined = [
+      ...mgDelhi.map(r => ({ ...r, _src: 'delhi_staff' })),
+      ...mgMumbai.map(r => ({ ...r, _src: 'mumbai_staff' }))
+    ];
+    const seen = new Set();
+    let removed = 0;
+    const rows = combined.map(r => {
+      const key = cols.map(c => r[c]).join('');
+      let kept = true;
+      if (mgMode === 'union') {
+        if (seen.has(key)) { kept = false; removed++; }
+        else seen.add(key);
+      }
+      return { ...r, _kept: kept };
+    });
+    const colSql = cols.join(', ');
+    const op = mgMode === 'union' ? 'UNION' : 'UNION ALL';
+    mgOut.textContent = `SELECT ${colSql} FROM delhi_staff\n${op}\nSELECT ${colSql} FROM mumbai_staff;`;
+    let h = '<table class="rt"><thead><tr>';
+    cols.forEach(c => h += `<th>${c}</th>`);
+    h += '<th>source</th></tr></thead><tbody>';
+    rows.forEach(r => {
+      h += `<tr class="${r._kept ? '' : 'row-removed'}">`;
+      cols.forEach(c => h += `<td>${uCell(r[c])}</td>`);
+      h += `<td class="src-cell">${r._src}</td></tr>`;
+    });
+    h += '</tbody></table>';
+    mgRes.innerHTML = h;
+    if (mgMode === 'union') {
+      mgNote.innerHTML = removed
+        ? `<span class="ok">UNION</span> removed <strong>${removed}</strong> duplicate row${removed > 1 ? 's' : ''} → ${rows.length - removed} unique rows returned.`
+        : `<span class="ok">UNION</span> found no duplicates on these columns → all ${rows.length} rows returned.`;
+    } else {
+      mgNote.innerHTML = `<span class="ok">UNION ALL</span> kept all <strong>${rows.length}</strong> rows — no comparison done.`;
+    }
+  }
+  mgModeSeg.addEventListener('click', e => {
+    const b = e.target.closest('.seg-btn');
+    if (!b) return;
+    mgMode = b.dataset.mode;
+    [...mgModeSeg.children].forEach(c => c.classList.toggle('active', c === b));
+    runMerge();
+  });
+  mgCols.addEventListener('change', runMerge);
+  runMerge();
+}
+
+// --- revenue consolidation ---
+const mgRevSeg = document.getElementById('mg-rev-mode');
+if (mgRevSeg) {
+  const mgRevOut = document.getElementById('mg-rev-out');
+  const mgRevRes = document.getElementById('mg-rev-res');
+  const mgRevTotal = document.getElementById('mg-rev-total');
+  let revMode = 'all';
+  function runRev() {
+    const combined = [...mgOnline, ...mgShop];
+    let rows, removed = 0;
+    if (revMode === 'union') {
+      const seen = new Set();
+      rows = combined.filter(r => {
+        const key = r.item_name + '' + r.price;
+        if (seen.has(key)) { removed++; return false; }
+        seen.add(key); return true;
+      });
+    } else {
+      rows = combined;
+    }
+    const op = revMode === 'union' ? 'UNION' : 'UNION ALL';
+    mgRevOut.textContent = `SELECT SUM(price) AS total_revenue FROM (\n    SELECT item_name, price FROM online_sales\n    ${op}\n    SELECT item_name, price FROM shop_sales\n) AS combined;`;
+    mgRevRes.innerHTML = uTable(rows, ['item_name', 'price']);
+    const total = rows.reduce((t, r) => t + r.price, 0);
+    if (revMode === 'union') {
+      mgRevTotal.innerHTML = `total_revenue = <strong>₹${total.toLocaleString('en-IN')}</strong> — <span class="bad">wrong!</span> UNION deleted ${removed} real sale${removed > 1 ? 's' : ''} (the second Mouse), undercounting revenue.`;
+    } else {
+      mgRevTotal.innerHTML = `total_revenue = <strong>₹${total.toLocaleString('en-IN')}</strong> — <span class="ok">correct.</span> Every transaction counted, including both Mouse sales.`;
+    }
+  }
+  mgRevSeg.addEventListener('click', e => {
+    const b = e.target.closest('.seg-btn');
+    if (!b) return;
+    revMode = b.dataset.mode;
+    [...mgRevSeg.children].forEach(c => c.classList.toggle('active', c === b));
+    runRev();
+  });
+  runRev();
+}
+
+// --- set explorer ---
+const mgSetOp = document.getElementById('mg-set-op');
+if (mgSetOp) {
+  const setStore = ['Raj', 'Neha', 'Sana'];
+  const setOnline = ['Raj', 'Amit', 'Sana'];
+  const both = setStore.filter(n => setOnline.includes(n));
+  const onlyA = setStore.filter(n => !setOnline.includes(n));
+  const onlyB = setOnline.filter(n => !setStore.includes(n));
+  document.getElementById('mg-bk-onlyA').textContent = onlyA.join(', ');
+  document.getElementById('mg-bk-both').textContent = both.join(', ');
+  document.getElementById('mg-bk-onlyB').textContent = onlyB.join(', ');
+  const buckets = document.getElementById('mg-set-buckets');
+  const setOut = document.getElementById('mg-set-out');
+  const setRes = document.getElementById('mg-set-res');
+  const SET_OPS = {
+    union: { active: ['onlyA', 'both', 'onlyB'], rows: () => [...new Set([...setStore, ...setOnline])],
+      sql: 'SELECT customer_name FROM store_customers\nUNION\nSELECT customer_name FROM online_customers;' },
+    unionall: { active: ['onlyA', 'both', 'onlyB'], rows: () => [...setStore, ...setOnline],
+      sql: 'SELECT customer_name FROM store_customers\nUNION ALL\nSELECT customer_name FROM online_customers;' },
+    intersect: { active: ['both'], rows: () => both.slice(),
+      sql: 'SELECT customer_name FROM store_customers\nINTERSECT\nSELECT customer_name FROM online_customers;' },
+    except_ab: { active: ['onlyA'], rows: () => onlyA.slice(),
+      sql: 'SELECT customer_name FROM store_customers\nEXCEPT\nSELECT customer_name FROM online_customers;' },
+    except_ba: { active: ['onlyB'], rows: () => onlyB.slice(),
+      sql: 'SELECT customer_name FROM online_customers\nEXCEPT\nSELECT customer_name FROM store_customers;' }
+  };
+  function runSet() {
+    const op = SET_OPS[mgSetOp.value];
+    [...buckets.children].forEach(b => b.classList.toggle('active', op.active.includes(b.dataset.bucket)));
+    setOut.textContent = op.sql;
+    setRes.innerHTML = uTable(op.rows().map(n => ({ customer_name: n })), ['customer_name']);
+  }
+  mgSetOp.addEventListener('change', runSet);
+  runSet();
+}
+
+// --- capstone: UNION or UNION ALL? ---
+buildClassify('mg-pick', 'mg-pick-score', [
+  { label: 'Goal', prompt: 'Build a mailing list of unique subscribers across two tables', options: [opt('UNION', true), opt('UNION ALL')], why: "UNION — you must not email the same person twice." },
+  { label: 'Goal', prompt: 'Total revenue for finance — sum every transaction', options: [opt('UNION'), opt('UNION ALL', true)], why: "UNION ALL — every sale must count, even identical ones." },
+  { label: 'Goal', prompt: 'Combine orders_2023 and orders_2024 (no overlap possible)', options: [opt('UNION'), opt('UNION ALL', true)], why: "UNION ALL — duplicates are impossible, so skip the costly sort." },
+  { label: 'Goal', prompt: 'Audit log: every login attempt from web + mobile servers', options: [opt('UNION'), opt('UNION ALL', true)], why: "UNION ALL — each attempt matters, even if it looks identical." },
+  { label: 'Goal', prompt: 'One clean list of all distinct cities your offices are in', options: [opt('UNION', true), opt('UNION ALL')], why: "UNION — you want each city listed once." }
+]);
+
+// --- capstone: predict the result ---
+buildClassify('mg-predict', 'mg-predict-score', [
+  { label: 'A=[X,Y] B=[Y,Z]', prompt: 'How many rows does <span class="mono">A UNION B</span> return?', code: true, options: [optN(3, true), optN(4), optN(2), optN(1)], why: "X, Y, Z — the duplicate Y collapses to one → 3 rows." },
+  { label: 'A=[X,Y] B=[Y,Z]', prompt: 'How many rows does <span class="mono">A UNION ALL B</span> return?', code: true, options: [optN(4, true), optN(3), optN(2), optN(6)], why: "All 4 rows kept: X, Y, Y, Z." },
+  { label: 'A=[X,Y] B=[Y,Z]', prompt: 'How many rows does <span class="mono">A INTERSECT B</span> return?', code: true, options: [optN(1, true), optN(2), optN(3), optN(0)], why: "Only Y is in both lists → 1 row." },
+  { label: 'A=[X,Y] B=[Y,Z]', prompt: 'Manual intersect via UNION ALL + GROUP BY + HAVING COUNT(*) — result?', options: [opt('Y', true), opt('X, Z'), opt('X, Y, Z'), opt('nothing')], why: "Only Y appears twice in the stacked list → HAVING COUNT(*)>1 keeps Y." },
+  { label: 'Trap', prompt: 'You build the manual intersect but use plain UNION (not ALL). Result?', options: [opt('Empty — every count is 1', true), opt('Y'), opt('X, Y, Z'), opt('An error')], why: "UNION dedupes first, so no name ever counts >1 → intersection silently fails." }
+]);
