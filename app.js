@@ -2526,3 +2526,414 @@ buildClassify('mg-predict', 'mg-predict-score', [
   { label: 'A=[X,Y] B=[Y,Z]', prompt: 'Manual intersect via UNION ALL + GROUP BY + HAVING COUNT(*) — result?', options: [opt('Y', true), opt('X, Z'), opt('X, Y, Z'), opt('nothing')], why: "Only Y appears twice in the stacked list → HAVING COUNT(*)>1 keeps Y." },
   { label: 'Trap', prompt: 'You build the manual intersect but use plain UNION (not ALL). Result?', options: [opt('Empty — every count is 1', true), opt('Y'), opt('X, Y, Z'), opt('An error')], why: "UNION dedupes first, so no name ever counts >1 → intersection silently fails." }
 ]);
+
+// ============ MODULE 12: JOINS DEEP DIVE ============
+const joinCustomers = [
+  { customer_id: 101, name: 'Aisha', email: 'aisha@demo.com', city: 'Delhi' },
+  { customer_id: 102, name: 'Rohan', email: 'rohan@demo.com', city: 'Mumbai' },
+  { customer_id: 103, name: 'Meera', email: 'meera@demo.com', city: null },
+  { customer_id: 104, name: 'Arjun', email: 'arjun@demo.com', city: 'Delhi' },
+  { customer_id: 106, name: 'Neha', email: 'neha@demo.com', city: 'Pune' },
+  { customer_id: 107, name: 'Ishaan', email: 'ishaan@demo.com', city: 'Bengaluru' },
+  { customer_id: 108, name: 'Riya', email: null, city: 'Delhi' },
+  { customer_id: 109, name: 'Aisha', email: 'aisha2@demo.com', city: 'Jaipur' }
+];
+const joinOrders = [
+  { order_id: 1, customer_id: 101, order_code: 'A', status: 'PAID', total_amount: 499.00 },
+  { order_id: 2, customer_id: 102, order_code: 'B', status: 'PAID', total_amount: 299.00 },
+  { order_id: 3, customer_id: 105, order_code: 'C', status: 'PAID', total_amount: 199.00 },
+  { order_id: 4, customer_id: 101, order_code: 'D', status: 'CANCELLED', total_amount: 999.00 },
+  { order_id: 5, customer_id: 106, order_code: 'E', status: 'PAID', total_amount: 799.00 },
+  { order_id: 6, customer_id: 106, order_code: 'F', status: 'PENDING', total_amount: 149.00 },
+  { order_id: 7, customer_id: null, order_code: 'G', status: 'PAID', total_amount: 249.00 },
+  { order_id: 8, customer_id: 999, order_code: 'H', status: 'PAID', total_amount: 129.00 }
+];
+const joinEmployees = [
+  { emp_id: 1, emp_name: 'Kriti', manager_id: null },
+  { emp_id: 2, emp_name: 'Siddhant', manager_id: 1 },
+  { emp_id: 3, emp_name: 'Anamika', manager_id: 1 },
+  { emp_id: 4, emp_name: 'Utkarsh', manager_id: 2 },
+  { emp_id: 5, emp_name: 'Ronit', manager_id: 2 },
+  { emp_id: 6, emp_name: 'Shivi', manager_id: 3 }
+];
+const joinLoyalty = [
+  { customer_id: 101, tier: 'GOLD' }, { customer_id: 102, tier: 'SILVER' },
+  { customer_id: 104, tier: 'BRONZE' }, { customer_id: 106, tier: 'GOLD' },
+  { customer_id: 201, tier: 'PINNACLE' }
+];
+const joinStudents = [
+  { student_id: 1, name: 'Aisha' }, { student_id: 2, name: 'Ravi' },
+  { student_id: 3, name: 'Neha' }, { student_id: null, name: 'Raj' }
+];
+const joinPayments = [
+  { student_id: 1, amount: 500 }, { student_id: 2, amount: 700 }, { student_id: 4, amount: 800 }
+];
+const joinStoreLoc = [
+  { customer_id: 101, city: 'Delhi', store_name: 'North Hub' },
+  { customer_id: 102, city: 'Pune', store_name: 'West Hub' }
+];
+const joinCrossDemos = {
+  catalog: { lcol: 'color_name', left: ['Red', 'Blue'], rcol: 'size_code', right: ['S', 'M', 'L'],
+    from: 'colors c', join: 'sizes s', sel: 'c.color_name, s.size_code' },
+  grid: { lcol: 'store_name', left: ['Delhi Central', 'Mumbai Hub'], rcol: 'month_name', right: ['January', 'February'],
+    from: 'stores s', join: 'months m', sel: 's.store_name, m.month_name' },
+  schedule: { lcol: 'teacher_name', left: ['Mr. Raj', 'Ms. Neha'], rcol: 'start_time', right: ['09:00 AM', '10:00 AM'],
+    from: 'teachers t', join: 'slots sl', sel: 't.teacher_name, sl.start_time' }
+};
+
+// source tables
+const jnCustSrc = document.getElementById('jn-cust-src');
+if (jnCustSrc) {
+  jnCustSrc.innerHTML = uTable(joinCustomers, ['customer_id', 'name', 'email', 'city']);
+  document.getElementById('jn-ord-src').innerHTML =
+    uTable(joinOrders, ['order_id', 'customer_id', 'order_code', 'status', 'total_amount']);
+}
+
+// shared row builder: pair a customer row with an order row (either may be null)
+function jnPair(c, o) {
+  return {
+    customer_id: c ? c.customer_id : null,
+    name: c ? c.name : null,
+    city: c ? c.city : null,
+    order_id: o ? o.order_id : null,
+    order_code: o ? o.order_code : null,
+    status: o ? o.status : null,
+    total_amount: o ? o.total_amount : null
+  };
+}
+const jnCustById = id => joinCustomers.find(c => c.customer_id === id) || null;
+
+// --- join visualizer ---
+const jnType = document.getElementById('jn-type');
+if (jnType) {
+  const jnOut = document.getElementById('jn-out');
+  const jnRes = document.getElementById('jn-res');
+  const jnNote = document.getElementById('jn-note');
+  const cols = ['customer_id', 'name', 'city', 'order_id', 'order_code', 'status'];
+
+  const JOINS = {
+    inner: {
+      sql: 'SELECT c.customer_id, c.name, c.city, o.order_id, o.order_code, o.status\nFROM customers c\nINNER JOIN orders o ON c.customer_id = o.customer_id;',
+      rows: () => joinOrders.map(o => jnCustById(o.customer_id) && jnPair(jnCustById(o.customer_id), o)).filter(Boolean),
+      note: r => `<span class="ok">INNER</span> kept only the <strong>${r.length}</strong> matched pairs — unmatched orders (105, 999, NULL) and order-less customers all dropped.`
+    },
+    left: {
+      sql: 'SELECT c.customer_id, c.name, c.city, o.order_id, o.order_code, o.status\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id;',
+      rows: () => {
+        const out = [];
+        joinCustomers.forEach(c => {
+          const m = joinOrders.filter(o => o.customer_id === c.customer_id);
+          if (m.length) m.forEach(o => out.push(jnPair(c, o)));
+          else out.push(jnPair(c, null));
+        });
+        return out;
+      },
+      note: r => `<span class="ok">LEFT</span> kept all <strong>8 customers</strong>. Those with no order show NULL on the order side → ${r.length} rows total.`
+    },
+    right: {
+      sql: 'SELECT c.customer_id, c.name, c.city, o.order_id, o.order_code, o.status\nFROM customers c\nRIGHT JOIN orders o ON c.customer_id = o.customer_id;',
+      rows: () => joinOrders.map(o => jnPair(jnCustById(o.customer_id), o)),
+      note: r => `<span class="ok">RIGHT</span> kept all <strong>8 orders</strong>. Orders 3, 7, 8 have no matching customer → NULL on the customer side.`
+    },
+    full: {
+      sql: 'SELECT c.customer_id, c.name, c.city, o.order_id, o.order_code, o.status\nFROM customers c\nFULL OUTER JOIN orders o ON c.customer_id = o.customer_id;\n-- MySQL: emulate with LEFT JOIN  UNION  RIGHT JOIN',
+      rows: () => {
+        const out = [];
+        joinCustomers.forEach(c => {
+          const m = joinOrders.filter(o => o.customer_id === c.customer_id);
+          if (m.length) m.forEach(o => out.push(jnPair(c, o)));
+          else out.push(jnPair(c, null));
+        });
+        joinOrders.forEach(o => { if (!jnCustById(o.customer_id)) out.push(jnPair(null, o)); });
+        return out;
+      },
+      note: r => `<span class="ok">FULL OUTER</span> keeps both sides: order-less customers AND customer-less orders → ${r.length} rows. MySQL has no FULL OUTER — you stitch it from LEFT + RIGHT with UNION.`
+    },
+    cross: {
+      sql: 'SELECT c.customer_id, c.name, o.order_id, o.order_code\nFROM customers c\nCROSS JOIN orders o;   -- no ON condition',
+      rows: () => { const out = []; joinCustomers.forEach(c => joinOrders.forEach(o => out.push(jnPair(c, o)))); return out; },
+      note: r => `<span class="warn">CROSS</span> pairs every customer with every order: 8 × 8 = <strong>${r.length}</strong> rows. No matching, no ON — combinations only.`
+    }
+  };
+
+  function runJoin() {
+    const j = JOINS[jnType.value];
+    const rows = j.rows();
+    jnOut.textContent = j.sql;
+    jnRes.innerHTML = uTable(rows, cols);
+    jnNote.innerHTML = j.note(rows);
+  }
+  jnType.addEventListener('change', runJoin);
+  runJoin();
+}
+
+// --- inner-join aggregate ---
+const jnAggRes = document.getElementById('jn-agg-res');
+if (jnAggRes) {
+  const rows = joinCustomers.map(c => {
+    const m = joinOrders.filter(o => o.customer_id === c.customer_id);
+    if (!m.length) return null;
+    return {
+      customer_id: c.customer_id, name: c.name,
+      orders_count: m.length,
+      revenue: m.reduce((t, o) => t + o.total_amount, 0)
+    };
+  }).filter(Boolean);
+  jnAggRes.innerHTML = uTable(rows, ['customer_id', 'name', 'orders_count', 'revenue']);
+}
+
+// --- ON vs WHERE ---
+const jnOwSeg = document.getElementById('jn-ow');
+if (jnOwSeg) {
+  const jnOwOut = document.getElementById('jn-ow-out');
+  const jnOwRes = document.getElementById('jn-ow-res');
+  const jnOwNote = document.getElementById('jn-ow-note');
+  const cols = ['name', 'city', 'order_code', 'status', 'total_amount'];
+  let owMode = 'on';
+  function runOw() {
+    let rows;
+    if (owMode === 'on') {
+      rows = [];
+      joinCustomers.forEach(c => {
+        const m = joinOrders.filter(o => o.customer_id === c.customer_id && o.status === 'PAID');
+        if (m.length) m.forEach(o => rows.push(jnPair(c, o)));
+        else rows.push(jnPair(c, null));
+      });
+      jnOwOut.textContent = "SELECT c.name, c.city, o.order_code, o.status, o.total_amount\nFROM customers c\nLEFT JOIN orders o\n  ON c.customer_id = o.customer_id\n  AND o.status = 'PAID';";
+    } else {
+      const full = [];
+      joinCustomers.forEach(c => {
+        const m = joinOrders.filter(o => o.customer_id === c.customer_id);
+        if (m.length) m.forEach(o => full.push(jnPair(c, o)));
+        else full.push(jnPair(c, null));
+      });
+      rows = full.filter(r => r.status === 'PAID');
+      jnOwOut.textContent = "SELECT c.name, c.city, o.order_code, o.status, o.total_amount\nFROM customers c\nLEFT JOIN orders o\n  ON c.customer_id = o.customer_id\nWHERE o.status = 'PAID';";
+    }
+    jnOwRes.innerHTML = uTable(rows, cols);
+    const kept = joinCustomers.filter(c => rows.some(r => r.name === c.name && r.city === c.city)).length;
+    if (owMode === 'on') {
+      jnOwNote.innerHTML = `<span class="ok">ON (soft filter)</span> → <strong>${rows.length} rows</strong>, all 8 customers preserved. Non-PAID orders just don't match, so those customers show NULL on the order side.`;
+    } else {
+      jnOwNote.innerHTML = `<span class="bad">WHERE (hard filter)</span> → only <strong>${rows.length} rows</strong>. Every order-less / non-PAID customer was deleted (NULL ≠ 'PAID'). The LEFT JOIN collapsed into an INNER JOIN.`;
+    }
+  }
+  jnOwSeg.addEventListener('click', e => {
+    const b = e.target.closest('.seg-btn');
+    if (!b) return;
+    owMode = b.dataset.mode;
+    [...jnOwSeg.children].forEach(c => c.classList.toggle('active', c === b));
+    runOw();
+  });
+  runOw();
+}
+
+// --- self join ---
+const jnEmpSrc = document.getElementById('jn-emp-src');
+if (jnEmpSrc) {
+  jnEmpSrc.innerHTML = uTable(joinEmployees, ['emp_id', 'emp_name', 'manager_id']);
+  const jnSelfPick = document.getElementById('jn-self-pick');
+  const jnSelfOut = document.getElementById('jn-self-out');
+  const jnSelfRes = document.getElementById('jn-self-res');
+  const jnSelfNote = document.getElementById('jn-self-note');
+  const empById = id => joinEmployees.find(e => e.emp_id === id) || null;
+
+  const SELF = {
+    mgr: {
+      sql: 'SELECT e.emp_name AS employee, m.emp_name AS manager\nFROM employees e\nJOIN employees m ON e.manager_id = m.emp_id\nORDER BY e.emp_id;',
+      cols: ['employee', 'manager'],
+      run: () => joinEmployees.filter(e => e.manager_id != null && empById(e.manager_id))
+        .map(e => ({ employee: e.emp_name, manager: empById(e.manager_id).emp_name })),
+      note: 'Kriti is excluded — her <code>manager_id</code> is NULL, so the default (INNER) JOIN finds no manager row.'
+    },
+    topboss: {
+      sql: "SELECT e.emp_name AS employee, IFNULL(m.emp_name, 'No Manager') AS manager\nFROM employees e\nLEFT JOIN employees m ON e.manager_id = m.emp_id\nORDER BY e.emp_id;",
+      cols: ['employee', 'manager'],
+      run: () => joinEmployees.map(e => ({
+        employee: e.emp_name,
+        manager: (e.manager_id != null && empById(e.manager_id)) ? empById(e.manager_id).emp_name : 'No Manager'
+      })),
+      note: 'Switching to <code>LEFT JOIN</code> keeps Kriti — <code>IFNULL</code> labels her NULL manager as "No Manager". Now all 6 staff appear.'
+    },
+    reports: {
+      sql: 'SELECT m.emp_name AS manager, COUNT(*) AS direct_reports\nFROM employees e\nJOIN employees m ON e.manager_id = m.emp_id\nGROUP BY m.emp_name\nORDER BY m.emp_name;',
+      cols: ['manager', 'direct_reports'],
+      run: () => {
+        const counts = {};
+        joinEmployees.forEach(e => {
+          if (e.manager_id != null && empById(e.manager_id)) {
+            const mgr = empById(e.manager_id).emp_name;
+            counts[mgr] = (counts[mgr] || 0) + 1;
+          }
+        });
+        return Object.keys(counts).sort().map(m => ({ manager: m, direct_reports: counts[m] }));
+      },
+      note: 'Kriti → 2 (Siddhant, Anamika) · Siddhant → 2 (Utkarsh, Ronit) · Anamika → 1 (Shivi).'
+    },
+    peers: {
+      sql: 'SELECT e1.emp_name AS teammate_A, e2.emp_name AS teammate_B, e1.manager_id\nFROM employees e1\nJOIN employees e2\n  ON e1.manager_id = e2.manager_id\n  AND e1.emp_id < e2.emp_id;',
+      cols: ['teammate_A', 'teammate_B', 'manager_id'],
+      run: () => {
+        const rows = [];
+        joinEmployees.forEach(a => joinEmployees.forEach(b => {
+          if (a.manager_id != null && a.manager_id === b.manager_id && a.emp_id < b.emp_id) {
+            rows.push({ teammate_A: a.emp_name, teammate_B: b.emp_name, manager_id: a.manager_id });
+          }
+        }));
+        return rows;
+      },
+      note: 'Match on the same <code>manager_id</code>; <code>e1.emp_id &lt; e2.emp_id</code> stops self-pairs and mirror duplicates.'
+    },
+    grand: {
+      sql: 'SELECT e.emp_name AS staff, m.emp_name AS manager, gm.emp_name AS grand_manager\nFROM employees e\nJOIN employees m ON e.manager_id = m.emp_id\nJOIN employees gm ON m.manager_id = gm.emp_id;',
+      cols: ['staff', 'manager', 'grand_manager'],
+      run: () => joinEmployees.map(e => {
+        const m = e.manager_id != null && empById(e.manager_id);
+        if (!m) return null;
+        const gm = m.manager_id != null && empById(m.manager_id);
+        if (!gm) return null;
+        return { staff: e.emp_name, manager: m.emp_name, grand_manager: gm.emp_name };
+      }).filter(Boolean),
+      note: 'Joining the table a third time climbs two levels — only staff with both a manager and a grand-manager survive.'
+    },
+    ic: {
+      sql: 'SELECT e.emp_name\nFROM employees e\nLEFT JOIN employees m ON e.emp_id = m.manager_id\nWHERE m.emp_id IS NULL;',
+      cols: ['emp_name'],
+      run: () => joinEmployees.filter(e => !joinEmployees.some(x => x.manager_id === e.emp_id))
+        .map(e => ({ emp_name: e.emp_name })),
+      note: 'Flip the join condition: anyone never referenced as a <code>manager_id</code> manages no one → an individual contributor.'
+    }
+  };
+
+  function runSelf() {
+    const s = SELF[jnSelfPick.value];
+    jnSelfOut.textContent = s.sql;
+    jnSelfRes.innerHTML = uTable(s.run(), s.cols);
+    jnSelfNote.innerHTML = s.note;
+  }
+  jnSelfPick.addEventListener('change', runSelf);
+  runSelf();
+}
+
+// --- FULL OUTER JOIN & COALESCE ---
+const jnStuSrc = document.getElementById('jn-stu-src');
+if (jnStuSrc) {
+  jnStuSrc.innerHTML = uTable(joinStudents, ['student_id', 'name']);
+  document.getElementById('jn-pay-src').innerHTML = uTable(joinPayments, ['student_id', 'amount']);
+  const jnFullSeg = document.getElementById('jn-full-mode');
+  const jnFullOut = document.getElementById('jn-full-out');
+  const jnFullRes = document.getElementById('jn-full-res');
+  const jnFullNote = document.getElementById('jn-full-note');
+  let fullMode = 'raw';
+  // build the FULL OUTER result, keeping both ids around
+  function fullRows() {
+    const out = [];
+    joinStudents.forEach(s => {
+      const p = s.student_id != null ? joinPayments.find(p => p.student_id === s.student_id) : null;
+      out.push({ s_id: s.student_id, p_id: p ? p.student_id : null, name: s.name, amount: p ? p.amount : null });
+    });
+    joinPayments.forEach(p => {
+      if (!joinStudents.some(s => s.student_id === p.student_id)) {
+        out.push({ s_id: null, p_id: p.student_id, name: null, amount: p.amount });
+      }
+    });
+    return out;
+  }
+  function runFull() {
+    const rows = fullRows();
+    if (fullMode === 'raw') {
+      jnFullOut.textContent = 'SELECT s.student_id, s.name, p.amount\nFROM students s\nLEFT JOIN payments p ON s.student_id = p.student_id\nUNION\nSELECT p.student_id, s.name, p.amount\nFROM students s\nRIGHT JOIN payments p ON s.student_id = p.student_id\nWHERE s.student_id IS NULL;';
+      jnFullRes.innerHTML = uTable(rows.map(r => ({ student_id: r.s_id, name: r.name, amount: r.amount })), ['student_id', 'name', 'amount']);
+      jnFullNote.innerHTML = `Problem spotted: the orphan payment of 800 shows <code>student_id = NULL</code> even though payments knows it's student 4.`;
+    } else {
+      jnFullOut.textContent = 'SELECT COALESCE(s.student_id, p.student_id) AS final_id, s.name, p.amount\nFROM students s\nLEFT JOIN payments p ON s.student_id = p.student_id\nUNION\nSELECT COALESCE(s.student_id, p.student_id) AS final_id, s.name, p.amount\nFROM students s\nRIGHT JOIN payments p ON s.student_id = p.student_id\nWHERE s.student_id IS NULL;';
+      jnFullRes.innerHTML = uTable(rows.map(r => ({ final_id: r.s_id != null ? r.s_id : r.p_id, name: r.name, amount: r.amount })), ['final_id', 'name', 'amount']);
+      jnFullNote.innerHTML = `<span class="ok">COALESCE</span> fills the orphan's id with 4 (from payments). Raj stays NULL — both sides are NULL, so there's nothing to fall back to.`;
+    }
+  }
+  jnFullSeg.addEventListener('click', e => {
+    const b = e.target.closest('.seg-btn');
+    if (!b) return;
+    fullMode = b.dataset.mode;
+    [...jnFullSeg.children].forEach(c => c.classList.toggle('active', c === b));
+    runFull();
+  });
+  runFull();
+}
+
+// --- cross join combination generator ---
+const jnCrossPick = document.getElementById('jn-cross-pick');
+if (jnCrossPick) {
+  const jnCrossOut = document.getElementById('jn-cross-out');
+  const jnCrossRes = document.getElementById('jn-cross-res');
+  const jnCrossNote = document.getElementById('jn-cross-note');
+  function runCross() {
+    const d = joinCrossDemos[jnCrossPick.value];
+    jnCrossOut.textContent = `SELECT ${d.sel}\nFROM ${d.from}\nCROSS JOIN ${d.join};`;
+    const rows = [];
+    d.left.forEach(l => d.right.forEach(r => rows.push({ [d.lcol]: l, [d.rcol]: r })));
+    jnCrossRes.innerHTML = uTable(rows, [d.lcol, d.rcol]);
+    jnCrossNote.innerHTML = `${d.left.length} × ${d.right.length} = <strong>${rows.length}</strong> combinations — no <code>ON</code>, no key, every pairing kept.`;
+  }
+  jnCrossPick.addEventListener('change', runCross);
+  runCross();
+}
+
+// --- natural join multi-column danger ---
+const jnNatDangerRes = document.getElementById('jn-nat-danger-res');
+if (jnNatDangerRes) {
+  // match on BOTH customer_id AND city (the shared column names)
+  const rows = [];
+  joinCustomers.forEach(c => joinStoreLoc.forEach(sl => {
+    if (c.customer_id === sl.customer_id && c.city === sl.city) {
+      rows.push({ customer_id: c.customer_id, city: c.city, name: c.name, store_name: sl.store_name });
+    }
+  }));
+  jnNatDangerRes.innerHTML = uTable(rows, ['customer_id', 'city', 'name', 'store_name']);
+  document.getElementById('jn-nat-danger-note').innerHTML =
+    `Rohan (102) vanished: his id matches, but his city is <code>Mumbai</code> in customers vs <code>Pune</code> in store_locations — the second shared column failed the match.`;
+}
+
+// --- implicit join result ---
+const jnImplRes = document.getElementById('jn-impl-res');
+if (jnImplRes) {
+  const rows = joinOrders
+    .map(o => jnCustById(o.customer_id) && {
+      customer_id: jnCustById(o.customer_id).customer_id,
+      name: jnCustById(o.customer_id).name,
+      order_code: o.order_code, status: o.status
+    })
+    .filter(Boolean);
+  jnImplRes.innerHTML = uTable(rows, ['customer_id', 'name', 'order_code', 'status']);
+}
+
+// --- natural join result ---
+const jnNatRes = document.getElementById('jn-nat-res');
+if (jnNatRes) {
+  const rows = joinCustomers
+    .map(c => {
+      const l = joinLoyalty.find(x => x.customer_id === c.customer_id);
+      return l ? { customer_id: c.customer_id, tier: l.tier } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.customer_id - b.customer_id);
+  jnNatRes.innerHTML = uTable(rows, ['customer_id', 'tier']);
+}
+
+// --- capstone: which join? ---
+buildClassify('jn-pick', 'jn-pick-score', [
+  { label: 'Goal', prompt: 'List EVERY order, with customer name if we know it (keep unknown-customer orders)', options: [opt('RIGHT JOIN', true), opt('INNER JOIN'), opt('CROSS JOIN')], why: "RIGHT JOIN (orders on the right) keeps all orders, NULL name when no match." },
+  { label: 'Goal', prompt: 'Find customers who have NEVER placed an order', options: [opt('LEFT JOIN + WHERE o.order_id IS NULL', true), opt('INNER JOIN'), opt('CROSS JOIN')], why: "LEFT JOIN keeps all customers; the unmatched ones have NULL order_id." },
+  { label: 'Goal', prompt: 'Total revenue per customer — only real customer↔order pairs', options: [opt('INNER JOIN', true), opt('FULL OUTER JOIN'), opt('CROSS JOIN')], why: "INNER JOIN drops the NULLs that would corrupt the SUM." },
+  { label: 'Goal', prompt: 'Generate every possible customer–coupon pairing for a test grid', options: [opt('CROSS JOIN', true), opt('LEFT JOIN'), opt('SELF JOIN')], why: "CROSS JOIN — you want all m × n combinations, no key needed." },
+  { label: 'Goal', prompt: 'Show each employee next to their manager (same table)', options: [opt('SELF JOIN', true), opt('FULL OUTER JOIN'), opt('CROSS JOIN')], why: "SELF JOIN — join employees to itself with two aliases." }
+]);
+
+// --- capstone: predict row count ---
+buildClassify('jn-predict', 'jn-predict-score', [
+  { label: 'INNER JOIN', prompt: 'How many rows match on customer_id?', code: true, options: [optN(5, true), optN(8), optN(6), optN(3)], why: "Orders 1,2,4,5,6 have real customers → 5 matched rows (3, 7, 8 drop)." },
+  { label: 'LEFT JOIN', prompt: 'customers LEFT JOIN orders — total rows?', code: true, options: [optN(10, true), optN(8), optN(5), optN(13)], why: "5 matched order rows + 5 order-less customers (103,104,107,108,109) = 10." },
+  { label: 'RIGHT JOIN', prompt: 'customers RIGHT JOIN orders — total rows?', code: true, options: [optN(8, true), optN(5), optN(10), optN(64)], why: "All 8 orders survive; the 3 without a customer just show NULL." },
+  { label: 'CROSS JOIN', prompt: '8 customers × 8 orders — total rows?', code: true, options: [optN(64, true), optN(16), optN(8), optN(40)], why: "Cartesian product: 8 × 8 = 64." },
+  { label: 'Trap', prompt: 'LEFT JOIN then WHERE o.status = \'PAID\' — order-less customers?', options: [opt('Gone — became an INNER JOIN', true), opt('Kept with NULLs'), opt('Causes an error')], why: "NULL status ≠ 'PAID', so WHERE deletes them — the LEFT JOIN collapses to INNER." }
+]);

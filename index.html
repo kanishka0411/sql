@@ -2709,6 +2709,272 @@ HAVING COUNT(*) > 1;               -- appeared in both → intersection</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 12: JOINS DEEP DIVE ==================== -->
+<section class="lesson" id="joins" data-title="Joins deep dive">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 12</div>
+    <h1>Joins deep dive</h1>
+    <p class="lede">Real data lives in separate tables that connect through shared keys. <code>JOIN</code> stitches their rows back together. Pick the join type, watch which rows survive, and learn the one trap that quietly turns every outer join into an inner one.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#jn-tables">The two tables</a>
+    <a href="#jn-visualizer">Join visualizer</a>
+    <a href="#jn-onwhere">ON vs WHERE</a>
+    <a href="#jn-full">FULL OUTER &amp; COALESCE</a>
+    <a href="#jn-self">Self join</a>
+    <a href="#jn-other">Cross · Implicit · Natural</a>
+    <a href="#jn-game">Capstone game</a>
+  </nav>
+
+  <div class="card">
+    <h3>What a JOIN actually does</h3>
+    <p class="muted">A join walks the rows of two tables and pairs them up wherever the <code>ON</code> condition is true. What you change is <strong>which unmatched rows are kept</strong> — and that single choice is the whole difference between INNER, LEFT, RIGHT and FULL.</p>
+    <table class="comparison-tbl">
+      <thead><tr><th>Join</th><th>Keeps unmatched from…</th><th>Plain-English ask</th></tr></thead>
+      <tbody>
+        <tr><td>INNER</td><td>Neither — matches only</td><td>"Only rows that exist in both."</td></tr>
+        <tr><td>LEFT</td><td>Left table</td><td>"All customers, orders if any."</td></tr>
+        <tr><td>RIGHT</td><td>Right table</td><td>"All orders, customer if known."</td></tr>
+        <tr><td>FULL OUTER</td><td>Both tables</td><td>"Everything from either side."</td></tr>
+        <tr><td>CROSS</td><td>No ON — every pair</td><td>"All combinations (m × n)."</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- The two tables -->
+  <div class="subsection" id="jn-tables">
+    <div class="sub-head"><div class="sub-tag">Setup · Reference</div><h2>The two tables</h2></div>
+
+    <div class="card">
+      <p class="muted">Everything below runs against these two. Note the deliberate gaps: customer <code>105</code>/<code>999</code> never existed, order <code>7</code> has a <code>NULL</code> customer, and several customers never ordered.</p>
+      <div class="dual-source">
+        <div><div class="src-label">customers (left)</div><div id="jn-cust-src"></div></div>
+        <div><div class="src-label">orders (right)</div><div id="jn-ord-src"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join visualizer -->
+  <div class="subsection" id="jn-visualizer">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>Join visualizer — flip the type, watch the rows</h2></div>
+
+    <div class="card">
+      <h3>🎮 One query, five join types</h3>
+      <p class="muted">Same <code>customers c</code> + <code>orders o</code>, same <code>ON c.customer_id = o.customer_id</code>. Only the join word changes. Rows filled with <code>NULL</code> are the "kept anyway" rows — proof of what each join preserves.</p>
+      <div class="control-row">
+        <select id="jn-type">
+          <option value="inner">INNER JOIN — matches only</option>
+          <option value="left" selected>LEFT JOIN — all customers</option>
+          <option value="right">RIGHT JOIN — all orders</option>
+          <option value="full">FULL OUTER JOIN — both sides</option>
+          <option value="cross">CROSS JOIN — every pair</option>
+        </select>
+      </div>
+      <pre class="code" id="jn-out"></pre>
+      <div id="jn-res"></div>
+      <div id="jn-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🔁</div>
+      <div><strong>LEFT and RIGHT are mirror images.</strong> <code>A LEFT JOIN B</code> is identical to <code>B RIGHT JOIN A</code>. Most people pick a side and stick with <code>LEFT JOIN</code> because reading parent → child top-to-bottom feels natural — but you'll meet RIGHT JOIN in other people's code, so know both.</div>
+    </div>
+
+    <div class="card">
+      <h3>INNER JOIN aggregates cleanly</h3>
+      <p class="muted">Because INNER drops unmatched rows, there are no stray <code>NULL</code>s to poison a <code>SUM</code> or <code>COUNT</code>. Revenue + order count per customer, computed live:</p>
+      <pre class="code">SELECT c.customer_id, c.name,
+       COUNT(*)            AS orders_count,
+       SUM(o.total_amount) AS revenue
+FROM customers c
+INNER JOIN orders o ON c.customer_id = o.customer_id
+GROUP BY c.customer_id, c.name;</pre>
+      <div id="jn-agg-res"></div>
+    </div>
+  </div>
+
+  <!-- ON vs WHERE -->
+  <div class="subsection" id="jn-onwhere">
+    <div class="sub-head"><div class="sub-tag">The trap · Playground</div><h2>ON vs WHERE — the soft and hard filter</h2></div>
+
+    <div class="card">
+      <h3>🎮 Same filter, two places, very different results</h3>
+      <p class="muted">We <code>LEFT JOIN</code> customers to orders and want only <code>PAID</code> orders. Put that condition in <code>ON</code> (during the join) versus <code>WHERE</code> (after) and watch the "zero-order" customers vanish.</p>
+      <div class="control-row">
+        <div class="seg" id="jn-ow">
+          <button class="seg-btn active" data-mode="on">filter in ON</button>
+          <button class="seg-btn" data-mode="where">filter in WHERE</button>
+        </div>
+      </div>
+      <pre class="code" id="jn-ow-out"></pre>
+      <div id="jn-ow-res"></div>
+      <div id="jn-ow-note" class="merge-note"></div>
+    </div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Aspect</th><th>ON (join condition)</th><th>WHERE (filter)</th></tr></thead>
+        <tbody>
+          <tr><td>When</td><td>During matching</td><td>After the join is built</td></tr>
+          <tr><td>Effect on unmatched rows</td><td>Kept, filled with NULL</td><td>Thrown away (NULL ≠ value)</td></tr>
+          <tr><td>Use it to…</td><td>Control what counts as a match</td><td>Trim the final result</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>The classic outer-join killer.</strong> Writing <code>WHERE o.status = 'PAID'</code> on a LEFT JOIN silently deletes every customer with no order — their <code>status</code> is <code>NULL</code>, and <code>NULL = 'PAID'</code> is never true. Your LEFT JOIN just became an INNER JOIN. Want to keep them? Put the condition in <code>ON</code>, or filter for <code>IS NULL</code> on purpose (the "who never ordered?" query).</div>
+    </div>
+  </div>
+
+  <!-- FULL OUTER & COALESCE -->
+  <div class="subsection" id="jn-full">
+    <div class="sub-head"><div class="sub-tag">Both sides · Playground</div><h2>FULL OUTER JOIN &amp; the COALESCE fix</h2></div>
+
+    <div class="card">
+      <h3>The audit tables</h3>
+      <p class="muted">A merger-style audit: keep <em>every</em> student and <em>every</em> payment. Note <code>Raj</code> has a <code>NULL</code> id, and payment for student <code>4</code> is an orphan (no such student).</p>
+      <div class="dual-source">
+        <div><div class="src-label">students</div><div id="jn-stu-src"></div></div>
+        <div><div class="src-label">payments</div><div id="jn-pay-src"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Raw full join vs COALESCE master-id</h3>
+      <p class="muted">MySQL has no <code>FULL OUTER JOIN</code> — you stitch <code>LEFT JOIN</code> + <code>RIGHT JOIN</code> with <code>UNION</code>. The raw version leaves the id <code>NULL</code> for the orphan payment (its student row doesn't exist). <code>COALESCE</code> falls back to the payment's id to build one clean key.</p>
+      <div class="control-row">
+        <div class="seg" id="jn-full-mode">
+          <button class="seg-btn active" data-mode="raw">raw — s.student_id</button>
+          <button class="seg-btn" data-mode="coalesce">COALESCE(s.id, p.id)</button>
+        </div>
+      </div>
+      <pre class="code" id="jn-full-out"></pre>
+      <div id="jn-full-res"></div>
+      <div id="jn-full-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>FULL OUTER exposes bad data.</strong> The orphan payment for student <code>4</code> and the <code>NULL</code>-id <code>Raj</code> aren't query bugs — they're data-quality findings the join surfaced. A <code>WHERE</code> on the nullable side (e.g. <code>WHERE s.name = 'Aisha'</code>) would quietly delete those rows and undo the whole "outer" point.</div>
+    </div>
+  </div>
+
+  <!-- Self join -->
+  <div class="subsection" id="jn-self">
+    <div class="sub-head"><div class="sub-tag">Hierarchies · Playground</div><h2>Self join — a table joined to itself</h2></div>
+
+    <div class="card">
+      <h3>The <code>employees</code> table</h3>
+      <p class="muted">Employee and manager live in the <em>same</em> table. Two aliases (<code>e</code> and <code>m</code>) let SQL treat one table as two and walk the hierarchy.</p>
+      <div id="jn-emp-src"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Build the org chart</h3>
+      <div class="control-row">
+        <select id="jn-self-pick">
+          <option value="mgr">Employee → Manager name (INNER)</option>
+          <option value="topboss">Include the top boss (LEFT + IFNULL)</option>
+          <option value="reports">Direct reports per manager</option>
+          <option value="peers">Peers — same manager</option>
+          <option value="grand">3 levels — staff → manager → grand-manager</option>
+          <option value="ic">Individual contributors (no reports)</option>
+        </select>
+      </div>
+      <pre class="code" id="jn-self-out"></pre>
+      <div id="jn-self-res"></div>
+      <div id="jn-self-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Cross / Implicit / Natural -->
+  <div class="subsection" id="jn-other">
+    <div class="sub-head"><div class="sub-tag">The rest · Reference</div><h2>Cross, implicit &amp; natural joins</h2></div>
+
+    <div class="card">
+      <h3>CROSS JOIN — the Cartesian product</h3>
+      <p class="muted">No <code>ON</code>. Every customer pairs with every order: <strong>8 × 8 = 64</strong> rows. Useful for generating grids (all customer–coupon pairs, all dates × products), dangerous by accident.</p>
+      <pre class="code">SELECT COUNT(*) FROM customers c CROSS JOIN orders o;   -- 64</pre>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Combination generator</h3>
+      <p class="muted">The "combo meal" mindset: no key needed, you just want every pairing. Pick two small reference tables and watch the grid build itself.</p>
+      <div class="control-row">
+        <select id="jn-cross-pick">
+          <option value="catalog">colors × sizes — T-shirt catalog</option>
+          <option value="grid">stores × months — sales report grid</option>
+          <option value="schedule">teachers × slots — sign-up sheet</option>
+        </select>
+      </div>
+      <pre class="code" id="jn-cross-out"></pre>
+      <div id="jn-cross-res"></div>
+      <div id="jn-cross-note" class="merge-note"></div>
+    </div>
+
+    <div class="card">
+      <h3>IMPLICIT JOIN — the old comma style</h3>
+      <p class="muted">Comma in <code>FROM</code> makes a Cartesian product; the <code>WHERE</code> condition trims it down to matches. Forget the <code>WHERE</code> and you've written an accidental CROSS JOIN.</p>
+      <pre class="code">SELECT c.customer_id, c.name, o.order_code, o.status
+FROM customers c, orders o
+WHERE c.customer_id = o.customer_id;   -- == INNER JOIN</pre>
+      <div id="jn-impl-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>NATURAL JOIN — auto-match by column name</h3>
+      <p class="muted">Joins on <em>every</em> identically-named column automatically — here <code>customer_id</code> links <code>customers</code> to <code>customer_loyalty</code>. No <code>ON</code> needed.</p>
+      <pre class="code">SELECT c.customer_id, cl.tier
+FROM customers c
+NATURAL JOIN customer_loyalty cl
+ORDER BY c.customer_id;</pre>
+      <div id="jn-nat-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>The multi-column trap</h3>
+      <p class="muted">Now both <code>customers</code> and <code>store_locations</code> share <strong>two</strong> names — <code>customer_id</code> AND <code>city</code>. NATURAL JOIN silently matches on both, so a customer listed under a different city vanishes.</p>
+      <pre class="code">SELECT * FROM customers NATURAL JOIN store_locations;</pre>
+      <div id="jn-nat-danger-res"></div>
+      <div id="jn-nat-danger-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>NATURAL JOIN is risky in real projects.</strong> If both tables later gain another same-named column (say <code>name</code>), the join silently starts matching on that too — changing results with zero warning. Prefer an explicit <code>ON</code> so the match key is always visible.</div>
+    </div>
+  </div>
+
+  <!-- Capstone game -->
+  <div class="subsection" id="jn-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Pick the join &amp; predict the rows</h2></div>
+
+    <div class="card">
+      <h3>🎮 Which join answers the question?</h3>
+      <p class="muted">Read each business goal and choose the right join.</p>
+      <div id="jn-pick"></div>
+      <div id="jn-pick-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 How many rows come back?</h3>
+      <p class="muted">Using the same <code>customers</code> (8 rows) and <code>orders</code> (8 rows) from this module.</p>
+      <div id="jn-predict"></div>
+      <div id="jn-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="joins">
+      <span>Mark Joins deep dive complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
