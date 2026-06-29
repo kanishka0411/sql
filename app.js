@@ -893,7 +893,18 @@ const clickExplains = {
   // relationships
   'rel-1n': `<strong>One-to-Many (1 : N)</strong> — the most common. One parent row links to many child rows. One student has many attendance records. The foreign key always lives on the "many" side (in <code>attendance</code>, not <code>students</code>).`,
   'rel-11': `<strong>One-to-One (1 : 1)</strong> — one row links to exactly one row in another table. Often used to split off sensitive or rarely-used data (e.g. <code>student_details</code> with a phone number). The FK is also marked UNIQUE so the match stays one-to-one.`,
-  'rel-mn': `<strong>Many-to-Many (M : N)</strong> — both sides can link to many of the other. A student joins many batches; a batch has many students. SQL can't store this directly — you add a <em>junction table</em> (e.g. <code>enrollments</code>) holding one FK to each side.`
+  'rel-mn': `<strong>Many-to-Many (M : N)</strong> — both sides can link to many of the other. A student joins many batches; a batch has many students. SQL can't store this directly — you add a <em>junction table</em> (e.g. <code>enrollments</code>) holding one FK to each side.`,
+  // host types (Module 13)
+  'host-any': `<strong>'%' (wildcard)</strong> — the user can log in from <em>any</em> machine, as long as they have the username and password. <code>CREATE USER 'raj'@'%' IDENTIFIED BY '123456';</code>. Most permissive; convenient for cloud apps, riskier for security.`,
+  'host-local': `<strong>'localhost'</strong> — the user can only connect from the <em>same machine</em> the MySQL server runs on. <code>CREATE USER 'raj_localhost'@'localhost' IDENTIFIED BY '123456';</code>. Gotcha: if MySQL runs in Docker, "localhost" is the <em>container</em>, not your host OS.`,
+  'host-ip': `<strong>A specific IP</strong> — login is allowed only from one machine's address. <code>CREATE USER 'raj_ip'@'192.168.65.1' IDENTIFIED BY '123456';</code>. Common in companies for tighter security — bind the account to a known server or VPN.`,
+  // InnoDB internals (Module 14)
+  'idb-start': `<strong>START TRANSACTION</strong> — InnoDB builds a transaction context: a <em>transaction ID</em> to track this unit of work, and a <em>read view</em> for MVCC so other sessions keep seeing a consistent older snapshot. No table copy, no row changes yet — just setup.`,
+  'idb-buffer': `<strong>Buffer pool &amp; dirty pages</strong> — rows live in <em>pages</em> on disk; a B+Tree index finds the right page. To change a row, InnoDB loads that page into RAM (the buffer pool) and edits it there. The modified-in-RAM-but-not-yet-flushed page is a <em>dirty page</em>.`,
+  'idb-lock': `<strong>Locks</strong> — your write takes a lock on the affected row(s). Another transaction trying to write the same row <em>waits</em> (and may time out). Reads can still proceed because MVCC serves them an older version. The lock is held until you COMMIT or ROLLBACK.`,
+  'idb-undo': `<strong>Undo log</strong> — before changing a row, InnoDB records its <em>previous</em> version. Two jobs: (1) <code>ROLLBACK</code> replays it to restore the old state, and (2) MVCC — other sessions follow the undo pointer to read the older version until you commit.`,
+  'idb-redo': `<strong>Redo log</strong> — not for rollback, for <em>durability</em>. As you modify pages in RAM, InnoDB also records the change. If MySQL crashes before dirty pages are flushed, recovery replays the redo log so committed changes aren't lost.`,
+  'idb-commit': `<strong>COMMIT</strong> — marks the transaction committed (finalizes its ID), <em>releases the locks</em>, and makes the changes visible to every other connection. ROLLBACK instead walks the undo log to reverse everything back to the last commit.`
 };
 
 document.querySelectorAll('.click-card').forEach(c => {
@@ -2936,4 +2947,346 @@ buildClassify('jn-predict', 'jn-predict-score', [
   { label: 'RIGHT JOIN', prompt: 'customers RIGHT JOIN orders — total rows?', code: true, options: [optN(8, true), optN(5), optN(10), optN(64)], why: "All 8 orders survive; the 3 without a customer just show NULL." },
   { label: 'CROSS JOIN', prompt: '8 customers × 8 orders — total rows?', code: true, options: [optN(64, true), optN(16), optN(8), optN(40)], why: "Cartesian product: 8 × 8 = 64." },
   { label: 'Trap', prompt: 'LEFT JOIN then WHERE o.status = \'PAID\' — order-less customers?', options: [opt('Gone — became an INNER JOIN', true), opt('Kept with NULLs'), opt('Causes an error')], why: "NULL status ≠ 'PAID', so WHERE deletes them — the LEFT JOIN collapses to INNER." }
+]);
+
+// ============ MODULE 13: PERMISSIONS & ACCESS CONTROL ============
+
+// --- GRANT privilege playground ---
+const pmPrivRow = document.getElementById('pm-priv-row');
+if (pmPrivRow) {
+  const pmGrantOut = document.getElementById('pm-grant-out');
+  const pmGrantOps = document.getElementById('pm-grant-ops');
+
+  // operations raj might attempt; `need` is the privilege required.
+  const pmOps = [
+    { need: 'SELECT', sql: "SELECT * FROM tuf_sql.students;" },
+    { need: 'INSERT', sql: "INSERT INTO tuf_sql.students (email, full_name, created_at)\n  VALUES ('new@tuf.org', 'new student', NOW());" },
+    { need: 'UPDATE', sql: "UPDATE tuf_sql.students SET city = 'mumbai' WHERE student_id = 1;" },
+    { need: 'DELETE', sql: "DELETE FROM tuf_sql.students WHERE student_id = 1;" },
+    { need: 'DROP',   sql: "DROP TABLE tuf_sql.students;" },
+    { need: 'REGRANT', sql: "GRANT SELECT ON tuf_sql.students TO 'neha'@'%';" }
+  ];
+
+  function pmGranted() {
+    return [...pmPrivRow.querySelectorAll('input[data-priv]')]
+      .filter(c => c.checked).map(c => c.dataset.priv);
+  }
+
+  function pmRunGrant() {
+    const granted = pmGranted();
+    const hasOpt = granted.includes('GRANT_OPTION');
+    const privs = granted.filter(p => p !== 'GRANT_OPTION');
+
+    // build the GRANT statement
+    if (privs.length === 0) {
+      pmGrantOut.textContent = "-- nothing granted yet --\n-- raj can connect but can't touch the table.";
+    } else {
+      pmGrantOut.textContent =
+        `GRANT ${privs.join(', ')}\nON tuf_sql.students\nTO 'raj'@'%'${hasOpt ? '\nWITH GRANT OPTION' : ''};`;
+    }
+
+    // evaluate each operation
+    let html = '';
+    pmOps.forEach(op => {
+      let allowed, why;
+      if (op.need === 'DROP') {
+        allowed = false;
+        why = 'DROP was never granted — table-owner action, denied.';
+      } else if (op.need === 'REGRANT') {
+        const canRegrant = hasOpt && privs.includes('SELECT');
+        allowed = canRegrant;
+        why = hasOpt
+          ? (privs.includes('SELECT') ? 'WITH GRANT OPTION lets raj re-grant a privilege he holds.' : "raj can delegate, but can't grant SELECT — he doesn't have it.")
+          : 'No WITH GRANT OPTION — raj can use privileges but not pass them on.';
+      } else {
+        allowed = privs.includes(op.need);
+        why = allowed ? `${op.need} is granted.` : `${op.need} not granted — permission denied.`;
+      }
+      html += `<div class="pm-op">
+        <span class="pm-badge ${allowed ? 'ok' : 'no'}">${allowed ? 'ALLOWED' : 'DENIED'}</span>
+        <div class="pm-op-body"><pre class="pm-op-sql">${op.sql}</pre><div class="pm-op-why">${why}</div></div>
+      </div>`;
+    });
+    pmGrantOps.innerHTML = html;
+  }
+
+  pmPrivRow.querySelectorAll('input[data-priv]').forEach(c => c.addEventListener('change', pmRunGrant));
+  pmRunGrant();
+}
+
+// --- GRANT ALL scope visualizer ---
+const pmScopeSel = document.getElementById('pm-scope-sel');
+if (pmScopeSel) {
+  const pmScopeOut = document.getElementById('pm-scope-out');
+  const pmScopeViz = document.getElementById('pm-scope-viz');
+  const pmScopeNote = document.getElementById('pm-scope-note');
+
+  const pmServer = [
+    { db: 'tuf_sql',   tables: ['students', 'payments', 'orders'] },
+    { db: 'analytics', tables: ['revenue', 'login_history'] }
+  ];
+
+  const pmScopes = {
+    table:  { sql: "GRANT ALL\nON tuf_sql.students\nTO 'raj'@'%';", note: "Full control of <strong>one table</strong>. raj can SELECT/INSERT/UPDATE/DELETE (and TRUNCATE) in <code>students</code> — and nothing else. Use when a user owns a single table.", reach: (db, t) => db === 'tuf_sql' && t === 'students' },
+    db:     { sql: "GRANT ALL\nON tuf_sql.*\nTO 'striver'@'%';", note: "Full control of the <strong>whole database</strong>. Every table in <code>tuf_sql</code> — including ones created later — is accessible. No reach outside it. Typical for a backend dev or DB owner.", reach: (db) => db === 'tuf_sql' },
+    server: { sql: "GRANT ALL\nON *.*\nTO 'admin_user'@'%';", note: "<strong>Superuser / God Mode.</strong> Full control of the entire server — read, modify or DROP any database. Only ever for trusted admins.", reach: () => true }
+  };
+
+  function pmRunScope() {
+    const s = pmScopes[pmScopeSel.value];
+    pmScopeOut.textContent = s.sql;
+    let html = '<div class="pm-server"><div class="pm-node-label">🖥️ MySQL server</div>';
+    pmServer.forEach(d => {
+      const dbReach = s.reach(d.db, null);
+      const anyTable = d.tables.some(t => s.reach(d.db, t));
+      html += `<div class="pm-db ${(dbReach || anyTable) ? 'on' : ''}"><div class="pm-node-label">🗄️ ${d.db}</div><div class="pm-tables">`;
+      d.tables.forEach(t => {
+        const on = s.reach(d.db, t);
+        html += `<span class="pm-tbl ${on ? 'on' : ''}">📄 ${t}</span>`;
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+    pmScopeViz.innerHTML = html;
+    pmScopeNote.innerHTML = s.note;
+  }
+
+  pmScopeSel.addEventListener('change', pmRunScope);
+  pmRunScope();
+}
+
+// --- default role trap ---
+const pmRoleGranted = document.getElementById('pm-role-granted');
+if (pmRoleGranted) {
+  const pmRoleDefault = document.getElementById('pm-role-default');
+  const pmRoleOut = document.getElementById('pm-role-out');
+  function pmRunRole() {
+    let msg;
+    if (!pmRoleGranted.checked) {
+      msg = "❌ The role isn't even granted. <code>raj_ip</code> has no engineering privileges at all — queries on <code>students</code> are denied.";
+    } else if (!pmRoleDefault.checked) {
+      msg = "⚠️ <strong>The trap.</strong> Role granted but <em>not</em> the default. raj_ip logs in with <strong>zero active roles</strong> — queries still fail until he runs <code>SET ROLE 'engineering';</code> by hand each session.";
+    } else {
+      msg = "✅ Role granted <strong>and</strong> set as default. It activates automatically on login — raj_ip inherits SELECT/INSERT/UPDATE immediately, no manual step.";
+    }
+    pmRoleOut.innerHTML = msg;
+  }
+  pmRoleGranted.addEventListener('change', pmRunRole);
+  pmRoleDefault.addEventListener('change', pmRunRole);
+  pmRunRole();
+}
+
+// --- quiz: which command? ---
+buildClassify('pm-cmd', 'pm-cmd-score', [
+  { label: 'Task', prompt: "Let 'raj'@'%' read the students table", options: [opt('GRANT', true), opt('REVOKE'), opt('ALTER USER')], why: "Giving a privilege → GRANT SELECT ... TO raj." },
+  { label: 'Task', prompt: "An employee left — block their login but keep the account", options: [opt('ALTER USER ... ACCOUNT LOCK', true), opt('REVOKE'), opt('GRANT')], why: "Freeze login without deleting setup → ALTER USER ... ACCOUNT LOCK." },
+  { label: 'Task', prompt: "Take away raj's INSERT and UPDATE on students", options: [opt('REVOKE', true), opt('GRANT'), opt('ALTER USER')], why: "Removing privileges → REVOKE ... FROM raj." },
+  { label: 'Task', prompt: "Rotate a leaked password to a new one", options: [opt('ALTER USER ... IDENTIFIED BY', true), opt('GRANT'), opt('REVOKE')], why: "Change the account's password → ALTER USER ... IDENTIFIED BY." },
+  { label: 'Task', prompt: "Remove the 'engineering' role from raj_ip", options: [opt('REVOKE', true), opt('ALTER USER'), opt('GRANT')], why: "Roles are removed with REVOKE 'engineering' FROM raj_ip." }
+]);
+
+// --- quiz: will it succeed? (raj has SELECT, INSERT only) ---
+buildClassify('pm-pf', 'pm-pf-score', [
+  { label: 'raj runs', prompt: "SELECT * FROM tuf_sql.students;", code: true, options: [opt('SUCCESS', true), opt('DENIED')], why: "SELECT is granted." },
+  { label: 'raj runs', prompt: "INSERT INTO tuf_sql.students ...", code: true, options: [opt('SUCCESS', true), opt('DENIED')], why: "INSERT is granted." },
+  { label: 'raj runs', prompt: "UPDATE tuf_sql.students SET city='blr';", code: true, options: [opt('SUCCESS'), opt('DENIED', true)], why: "UPDATE was never granted → permission denied." },
+  { label: 'raj runs', prompt: "DELETE FROM tuf_sql.students WHERE student_id=1;", code: true, options: [opt('SUCCESS'), opt('DENIED', true)], why: "DELETE not granted → denied." },
+  { label: 'raj runs', prompt: "GRANT SELECT ON tuf_sql.students TO 'neha'@'%';", code: true, options: [opt('SUCCESS'), opt('DENIED', true)], why: "No WITH GRANT OPTION → raj can't re-grant anything." }
+]);
+
+// --- quiz: user or role? ---
+buildClassify('pm-ur', 'pm-ur-score', [
+  { label: 'Account', prompt: "engineering — no password, account locked", options: [opt('Role', true), opt('User')], why: "No authentication string + locked → a role (holds privileges, never logs in)." },
+  { label: 'Account', prompt: "raj — has a password, logs in from '%'", options: [opt('User', true), opt('Role')], why: "Has a password and connects → a user." },
+  { label: 'Account', prompt: "support — no password, holds privileges for the team", options: [opt('Role', true), opt('User')], why: "Password-less bundle of privileges → a role." },
+  { label: 'Account', prompt: "root — has a password, full server access", options: [opt('User', true), opt('Role')], why: "The admin user — has a password, logs in." }
+]);
+
+// ============ MODULE 14: TRANSACTIONS & CONCURRENCY ============
+
+// --- connection pool vs single ---
+const txPoolMode = document.getElementById('tx-pool-mode');
+if (txPoolMode) {
+  const txPoolViz = document.getElementById('tx-pool-viz');
+  const txPoolNote = document.getElementById('tx-pool-note');
+  const txPoolSend = document.getElementById('tx-pool-send');
+  let txMode = 'pool';
+
+  function txPoolRender(sent) {
+    const reqs = ['A', 'B', 'C'];
+    let html = '';
+    reqs.forEach((r, i) => {
+      const conn = txMode === 'pool' ? i + 1 : 1;
+      const lane = txMode === 'pool' ? 'parallel' : 'queued';
+      const wait = txMode === 'pool' ? 0 : i;
+      html += `<div class="tx-pool-row ${sent ? 'go' : ''}" style="--d:${wait * 0.5}s">
+        <span class="tx-req">Request ${r}</span>
+        <span class="tx-arrow">→</span>
+        <span class="tx-conn">conn ${conn}</span>
+        <span class="tx-lane ${lane}">${txMode === 'pool' ? 'runs now (parallel)' : (i === 0 ? 'runs now' : `waits for ${reqs[i - 1]}`)}</span>
+      </div>`;
+    });
+    txPoolViz.innerHTML = html;
+    if (sent) {
+      txPoolNote.innerHTML = txMode === 'pool'
+        ? "✅ <strong>Pool:</strong> each request gets its own free connection — all three run <em>in parallel</em>. The backend serves many users at once."
+        : "⚠️ <strong>Single connection:</strong> only one query runs at a time. B waits for A, C waits for B — a queue that gets slow under traffic.";
+    } else {
+      txPoolNote.innerHTML = '';
+    }
+  }
+  txPoolMode.querySelectorAll('.fbtn').forEach(b => b.addEventListener('click', () => {
+    txPoolMode.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('on', x === b));
+    txMode = b.dataset.m; txPoolRender(false);
+  }));
+  txPoolSend.addEventListener('click', () => txPoolRender(true));
+  txPoolRender(false);
+}
+
+// --- COMMIT / ROLLBACK simulator ---
+const txSim = document.getElementById('tx-sim-controls');
+if (txSim) {
+  const txMine = document.getElementById('tx-sim-mine');
+  const txOther = document.getElementById('tx-sim-other');
+  const txLog = document.getElementById('tx-sim-log');
+  const txNote = document.getElementById('tx-sim-note');
+  const ORIG = { student_id: 1, full_name: 'raj', status: 'BANNED', city: 'blr' };
+  let committed, working, inTxn, log;
+
+  function txReset() {
+    committed = { ...ORIG };
+    working = { ...ORIG };
+    inTxn = false;
+    log = [];
+    txDraw();
+  }
+  function txBtn(act) { return txSim.querySelector(`[data-act="${act}"]`); }
+  function txDraw(note) {
+    const cols = ['student_id', 'full_name', 'status', 'city'];
+    txMine.innerHTML = uTable([inTxn ? working : committed], cols);
+    txOther.innerHTML = uTable([committed], cols);
+    txLog.innerHTML = log.length
+      ? log.map(l => `<div class="tx-log-line">${l}</div>`).join('')
+      : '<div class="tx-log-line muted">No statements yet. Press START TRANSACTION.</div>';
+    txBtn('start').disabled = inTxn;
+    ['status', 'city', 'commit', 'rollback'].forEach(a => txBtn(a).disabled = !inTxn);
+    if (note) txNote.innerHTML = note;
+  }
+
+  txSim.addEventListener('click', e => {
+    const b = e.target.closest('.fbtn'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'reset') { txReset(); txNote.innerHTML = ''; return; }
+    if (act === 'start') { inTxn = true; working = { ...committed }; log = ['START TRANSACTION;']; txDraw("Transaction open. Changes now stay in your session only — the other panel still shows committed data."); return; }
+    if (!inTxn) return;
+    if (act === 'status') { working.status = 'ACTIVE'; log.push("UPDATE students SET status='ACTIVE' WHERE student_id=1;"); txDraw("Your session sees <code>ACTIVE</code> — but it's uncommitted, so the other session still sees <code>BANNED</code>."); return; }
+    if (act === 'city') { working.city = 'Delhi'; log.push("UPDATE students SET city='Delhi' WHERE student_id=1;"); txDraw("Same story for <code>city</code>: visible to you, invisible to everyone else until commit."); return; }
+    if (act === 'commit') { committed = { ...working }; inTxn = false; log.push('COMMIT;'); txDraw("✅ <strong>COMMIT</strong> — changes are now permanent and visible to <em>all</em> sessions. Locks released."); return; }
+    if (act === 'rollback') { working = { ...committed }; inTxn = false; log.push('ROLLBACK;'); txDraw("↩️ <strong>ROLLBACK</strong> — every change since START TRANSACTION is discarded via the undo log. Back to the last committed state."); return; }
+  });
+  txReset();
+}
+
+// --- SAVEPOINT stepper ---
+const txSpStep = document.getElementById('tx-sp-step');
+if (txSpStep) {
+  const txSpReset = document.getElementById('tx-sp-reset');
+  const txSpCode = document.getElementById('tx-sp-code');
+  const txSpAcc = document.getElementById('tx-sp-accounts');
+  const txSpEnr = document.getElementById('tx-sp-enroll');
+  const txSpNote = document.getElementById('tx-sp-note');
+
+  // each step: code line, accounts state, enrollment present?, note
+  const spSteps = [
+    { line: 'START TRANSACTION;', acc: [{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], enr: false, note: 'Transaction begins. Nothing committed yet.' },
+    { line: "INSERT INTO enrollments (...) VALUES (4, 3, 'ACTIVE', ...);", acc: [{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], enr: true, note: 'A new enrollment is inserted — temporary until commit.' },
+    { line: 'SAVEPOINT sp_before_balance_transfer;', acc: [{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], enr: true, note: '📌 Bookmark set. Everything up to here can be kept even if we undo later work.' },
+    { line: 'UPDATE accounts SET balance = balance - 200 WHERE id = 1;', acc: [{ id: 1, balance: 800 }, { id: 2, balance: 500 }], enr: true, note: 'Account 1 debited ₹200 — still uncommitted.' },
+    { line: 'UPDATE accounts SET balance = balance + 200 WHERE id = 2;', acc: [{ id: 1, balance: 800 }, { id: 2, balance: 700 }], enr: true, note: 'Account 2 credited ₹200. The transfer is staged.' },
+    { line: 'ROLLBACK TO SAVEPOINT sp_before_balance_transfer;', acc: [{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], enr: true, note: '↩️ Only the work <em>after</em> the savepoint is undone — balances revert, but the enrollment stays. Transaction is still open.' },
+    { line: 'COMMIT;', acc: [{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], enr: true, note: '✅ COMMIT saves what remains: the enrollment is stored, the balance transfer was discarded.' }
+  ];
+  let spIdx = -1;
+
+  function spDraw() {
+    const shown = spSteps.slice(0, spIdx + 1);
+    txSpCode.innerHTML = spSteps.map((s, i) =>
+      `<span class="tx-codeline ${i === spIdx ? 'cur' : (i < spIdx ? 'past' : 'future')}">${s.line}</span>`
+    ).join('\n');
+    const cur = spIdx < 0 ? null : spSteps[spIdx];
+    if (!cur) {
+      txSpAcc.innerHTML = uTable([{ id: 1, balance: 1000 }, { id: 2, balance: 500 }], ['id', 'balance']);
+      txSpEnr.innerHTML = '<div class="muted" style="padding:10px 0;">none yet</div>';
+      txSpNote.innerHTML = 'Press <strong>Next step</strong> to walk through the transaction.';
+      return;
+    }
+    txSpAcc.innerHTML = uTable(cur.acc, ['id', 'balance']);
+    txSpEnr.innerHTML = cur.enr
+      ? uTable([{ student_id: 4, course_id: 3, status: 'ACTIVE' }], ['student_id', 'course_id', 'status'])
+      : '<div class="muted" style="padding:10px 0;">none yet</div>';
+    txSpNote.innerHTML = cur.note;
+  }
+  txSpStep.addEventListener('click', () => { if (spIdx < spSteps.length - 1) { spIdx++; spDraw(); } if (spIdx === spSteps.length - 1) txSpStep.disabled = true; });
+  txSpReset.addEventListener('click', () => { spIdx = -1; txSpStep.disabled = false; spDraw(); });
+  spDraw();
+}
+
+// --- deadlock stepper ---
+const txDlStep = document.getElementById('tx-dl-step');
+if (txDlStep) {
+  const txDlReset = document.getElementById('tx-dl-reset');
+  const txDlT1 = document.getElementById('tx-dl-t1');
+  const txDlT2 = document.getElementById('tx-dl-t2');
+  const txDlNote = document.getElementById('tx-dl-note');
+
+  // step: [t1 state lines], [t2 state lines], note
+  const dlSteps = [
+    { t1: [['run', 'LOCK row A ✓']], t2: [], note: 'T1 locks <strong>row A</strong>.' },
+    { t1: [['done', 'LOCK row A ✓']], t2: [['run', 'LOCK row B ✓']], note: 'T2 locks <strong>row B</strong>. So far so good — different rows.' },
+    { t1: [['done', 'LOCK row A ✓'], ['fail', 'wants row B… ⏳ waiting']], t2: [['done', 'LOCK row B ✓']], note: 'T1 now wants <strong>row B</strong> — held by T2. T1 must <em>wait</em>.' },
+    { t1: [['done', 'LOCK row A ✓'], ['fail', 'wants row B… ⏳ waiting']], t2: [['done', 'LOCK row B ✓'], ['fail', 'wants row A… ⏳ waiting']], note: '💥 <strong>Deadlock.</strong> T2 wants row A (held by T1). Each holds what the other needs — they would wait forever.' },
+    { t1: [['done', 'LOCK row A ✓'], ['done', 'got row B ✓ → COMMIT']], t2: [['done', 'LOCK row B ✓'], ['fail', 'ROLLED BACK by MySQL']], note: '🔨 MySQL <strong>detects the deadlock</strong> and rolls back one victim (T2) so the other (T1) can finish. The app should retry T2.' }
+  ];
+  let dlIdx = -1;
+
+  function dlRows(lines) {
+    if (!lines.length) return '<div class="txn-row"><div class="txn-dot">·</div><div class="muted">idle</div></div>';
+    return lines.map((l, i) => `<div class="txn-row"><div class="txn-dot ${l[0]}">${i + 1}</div><div>${l[1]}</div></div>`).join('');
+  }
+  function dlDraw() {
+    const cur = dlIdx < 0 ? { t1: [], t2: [], note: 'Press <strong>Next step</strong> to watch two transactions deadlock.' } : dlSteps[dlIdx];
+    txDlT1.innerHTML = dlRows(cur.t1);
+    txDlT2.innerHTML = dlRows(cur.t2);
+    txDlNote.innerHTML = cur.note;
+  }
+  txDlStep.addEventListener('click', () => { if (dlIdx < dlSteps.length - 1) { dlIdx++; dlDraw(); } if (dlIdx === dlSteps.length - 1) txDlStep.disabled = true; });
+  txDlReset.addEventListener('click', () => { dlIdx = -1; txDlStep.disabled = false; dlDraw(); });
+  dlDraw();
+}
+
+// --- quiz: which keyword? ---
+buildClassify('tx-cmd', 'tx-cmd-score', [
+  { label: 'Goal', prompt: 'Permanently save all changes in the current transaction', options: [opt('COMMIT', true), opt('ROLLBACK'), opt('SAVEPOINT')], why: 'COMMIT finalizes and makes changes visible to all.' },
+  { label: 'Goal', prompt: 'Throw away everything since START TRANSACTION', options: [opt('ROLLBACK', true), opt('COMMIT'), opt('SAVEPOINT')], why: 'ROLLBACK reverts to the last committed state via the undo log.' },
+  { label: 'Goal', prompt: 'Bookmark a point so you can undo only later work', options: [opt('SAVEPOINT', true), opt('COMMIT'), opt('ROLLBACK')], why: 'SAVEPOINT marks a checkpoint; ROLLBACK TO SAVEPOINT undoes only after it.' },
+  { label: 'Goal', prompt: 'Undo just the balance transfer but keep the earlier insert', options: [opt('ROLLBACK TO SAVEPOINT', true), opt('ROLLBACK'), opt('COMMIT')], why: 'Plain ROLLBACK would discard the insert too — roll back to the savepoint instead.' },
+  { label: 'Goal', prompt: 'Begin grouping statements into one atomic unit', options: [opt('START TRANSACTION', true), opt('COMMIT'), opt('SAVEPOINT')], why: 'START TRANSACTION opens the unit; until then MySQL auto-commits.' }
+]);
+
+// --- quiz: what survives? ---
+buildClassify('tx-survive', 'tx-survive-score', [
+  { label: 'Predict', prompt: 'UPDATE x; then ROLLBACK; — is the change saved?', code: true, options: [opt('No — discarded', true), opt('Yes — saved')], why: 'ROLLBACK throws away all uncommitted work.' },
+  { label: 'Predict', prompt: 'UPDATE x; then COMMIT; — visible to other sessions?', code: true, options: [opt('Yes', true), opt('No')], why: 'COMMIT makes changes globally visible.' },
+  { label: 'Predict', prompt: 'INSERT; SAVEPOINT s; UPDATE; ROLLBACK TO s; COMMIT; — INSERT kept?', code: true, options: [opt('Yes — INSERT survives', true), opt('No')], why: 'Rolling back to the savepoint only undoes the UPDATE after it; the INSERT before it stays and commits.' },
+  { label: 'Predict', prompt: 'Inside an open txn, before COMMIT — what does another session see?', options: [opt('The old committed version', true), opt('Your new values')], why: 'MVCC serves others the older version (via undo log) until you commit.' },
+  { label: 'Predict', prompt: 'A bare UPDATE with no START TRANSACTION — saved immediately?', code: true, options: [opt('Yes — auto-commit', true), opt('No')], why: 'Outside a transaction MySQL auto-commits each statement.' }
+]);
+
+// --- quiz: concept check ---
+buildClassify('tx-concept', 'tx-concept-score', [
+  { label: 'Which log?', prompt: 'Reverses a change on ROLLBACK and powers MVCC reads', options: [opt('Undo log', true), opt('Redo log')], why: 'Undo log keeps the old version — for rollback and consistent reads.' },
+  { label: 'Which log?', prompt: 'Replays committed changes after a crash (durability)', options: [opt('Redo log', true), opt('Undo log')], why: 'Redo log re-applies changes if dirty pages weren\'t flushed before a crash.' },
+  { label: 'Concept', prompt: "START on conn 78, COMMIT on conn 80 — does the commit work?", options: [opt('No — state is on conn 78', true), opt('Yes')], why: 'Transaction state lives on one connection; commit elsewhere does nothing for it.' },
+  { label: 'Concept', prompt: 'Two txns lock each other\'s rows in opposite order, forever', options: [opt('Deadlock', true), opt('Timeout'), opt('Dirty read')], why: 'Mutual waiting = deadlock; MySQL rolls back one victim.' },
+  { label: 'Concept', prompt: 'A modified page sitting in RAM, not yet flushed to disk', options: [opt('Dirty page', true), opt('Redo log'), opt('Read view')], why: 'Changed-in-buffer-pool-but-unflushed = a dirty page.' }
 ]);

@@ -2975,6 +2975,453 @@ ORDER BY c.customer_id;</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 13: PERMISSIONS & ACCESS CONTROL ==================== -->
+<section class="lesson" id="permissions" data-title="Permissions &amp; access control">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 13</div>
+    <h1>Permissions &amp; access control</h1>
+    <p class="lede">A database is only as safe as the keys you hand out. <code>GRANT</code>, <code>REVOKE</code> and <code>ALTER USER</code> decide <strong>who</strong> can do <strong>what</strong>, <strong>where</strong> — from a single table to the whole server. This is DCL: Data Control Language.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#pm-what">What &amp; why</a>
+    <a href="#pm-users">Users vs roles</a>
+    <a href="#pm-grant">GRANT playground</a>
+    <a href="#pm-scope">GRANT ALL scope</a>
+    <a href="#pm-roles">Roles &amp; delegation</a>
+    <a href="#pm-alter">ALTER USER</a>
+    <a href="#pm-revoke">REVOKE</a>
+    <a href="#pm-game">Quiz</a>
+  </nav>
+
+  <div class="card">
+    <h3>What is a privilege?</h3>
+    <p class="muted">A <strong>privilege</strong> is a single permission that controls what a user can do — read rows, insert, update, delete, create tables, drop tables. The admin decides which user gets access to which database or table.</p>
+    <div class="card tip-card">
+      <div class="tip-icon">🔐</div>
+      <div><strong>Real-life analogy.</strong> You can't give every team member access to sensitive tables like <code>user_login_history</code> or <code>revenue</code>. You grant access only to the people who actually need it — and ideally keep an audit trail. <em>Least privilege</em> is the whole game.</div>
+    </div>
+    <p class="muted">Three commands do all the work, and each is the mirror of another:</p>
+    <table class="comparison-tbl">
+      <thead><tr><th>Command</th><th>Does</th><th>Direction word</th></tr></thead>
+      <tbody>
+        <tr><td><code>GRANT</code></td><td>Gives a privilege or role</td><td><code>TO</code> a user/role</td></tr>
+        <tr><td><code>REVOKE</code></td><td>Removes a privilege or role</td><td><code>FROM</code> a user/role</td></tr>
+        <tr><td><code>ALTER USER</code></td><td>Changes the account itself (password, lock)</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Users vs roles -->
+  <div class="subsection" id="pm-users">
+    <div class="sub-head"><div class="sub-tag">Foundations · Reference</div><h2>Users, hosts &amp; roles</h2></div>
+
+    <div class="card">
+      <h3>Where users live</h3>
+      <p class="muted">MySQL stores every account — users <em>and</em> roles — in one system table: <code>mysql.user</code>. List them with <code>SELECT user, host FROM mysql.user;</code>. A user is defined not just by name, but by <strong>where they connect from</strong> — the <code>host</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3>Click a host type</h3>
+      <p class="muted"><code>'raj'@'localhost'</code> and <code>'raj'@'%'</code> are <strong>different accounts</strong>. The host is half the identity.</p>
+      <div class="click-grid three">
+        <button class="click-card" data-group="host" data-key="host-any"><div class="cc-name">'%'</div><div class="cc-tag">any machine</div></button>
+        <button class="click-card" data-group="host" data-key="host-local"><div class="cc-name">'localhost'</div><div class="cc-tag">server only</div></button>
+        <button class="click-card" data-group="host" data-key="host-ip"><div class="cc-name">'192.168.65.1'</div><div class="cc-tag">one IP</div></button>
+      </div>
+      <div class="click-detail" data-group="host">Click a host type above.</div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Creating a user grants nothing.</strong> <code>CREATE USER 'raj'@'%' IDENTIFIED BY '123456';</code> lets raj <em>connect</em> — but he can't see or touch a single table until you <code>GRANT</code> him something.</div>
+    </div>
+
+    <div class="card">
+      <h3>User or role? Same table, different shape</h3>
+      <p class="muted">Roles don't live in a separate table — they sit in <code>mysql.user</code> too. The tell isn't the table, it's the <strong>account properties</strong>: a <em>user has a password</em> and logs in; a <em>role has no password</em> and just holds privileges.</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Account</th><th>Has password?</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr><td><code>root</code></td><td>Yes</td><td>User</td></tr>
+          <tr><td><code>raj</code></td><td>Yes</td><td>User</td></tr>
+          <tr><td><code>engineering</code></td><td>No</td><td>Role</td></tr>
+          <tr><td><code>support</code></td><td>No</td><td>Role</td></tr>
+        </tbody>
+      </table>
+      <p class="muted" style="margin-top:12px;">Roles are typically locked and password-less, so you can list them with:</p>
+      <pre class="code">SELECT user AS role_name, host
+FROM mysql.user
+WHERE account_locked = 'Y'
+  AND (authentication_string IS NULL OR authentication_string = '')
+ORDER BY user;</pre>
+    </div>
+  </div>
+
+  <!-- GRANT playground -->
+  <div class="subsection" id="pm-grant">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>GRANT — build the privilege set</h2></div>
+
+    <div class="card">
+      <p class="muted">Everything below protects this one table. Run all <code>GRANT</code>/<code>REVOKE</code> statements as <strong>root/admin</strong> — only an admin can create users and hand out privileges.</p>
+      <pre class="code">CREATE TABLE students (
+  student_id INT PRIMARY KEY AUTO_INCREMENT,
+  email      VARCHAR(120) NOT NULL UNIQUE,
+  full_name  VARCHAR(80)  NOT NULL,
+  city       VARCHAR(60),
+  status     ENUM('ACTIVE','BANNED') NOT NULL DEFAULT 'ACTIVE',
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB;</pre>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Tick privileges, watch what raj can do</h3>
+      <p class="muted">Pick what you <code>GRANT</code> to <code>'raj'@'%'</code> on <code>tuf_sql.students</code>. The statement rebuilds, and every operation raj might try is re-checked live. Notice <code>DROP</code> never appears in the list — it was never granted, so it always fails.</p>
+      <div class="control-row pm-priv-row" id="pm-priv-row">
+        <label class="pm-check"><input type="checkbox" data-priv="SELECT" checked> SELECT</label>
+        <label class="pm-check"><input type="checkbox" data-priv="INSERT"> INSERT</label>
+        <label class="pm-check"><input type="checkbox" data-priv="UPDATE"> UPDATE</label>
+        <label class="pm-check"><input type="checkbox" data-priv="DELETE"> DELETE</label>
+        <label class="pm-check pm-check-special"><input type="checkbox" data-priv="GRANT_OPTION"> WITH GRANT OPTION</label>
+      </div>
+      <pre class="code" id="pm-grant-out"></pre>
+      <div id="pm-grant-ops" class="pm-ops"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🔎</div>
+      <div><strong>Always verify.</strong> As admin, run <code>SHOW GRANTS FOR 'raj'@'%';</code> to see exactly what's been granted. To truly confirm, log in <em>as raj</em> and try the operation — a missing privilege fails with "permission denied".</div>
+    </div>
+  </div>
+
+  <!-- GRANT ALL scope -->
+  <div class="subsection" id="pm-scope">
+    <div class="sub-head"><div class="sub-tag">The blast radius · Playground</div><h2>GRANT ALL — it's all about scope</h2></div>
+
+    <div class="card">
+      <h3>🎮 Move the scope, watch the blast radius</h3>
+      <p class="muted"><code>GRANT ALL</code> hands over <em>every</em> privilege — but its real power depends entirely on <strong>where</strong> you point it. Switch the scope and watch how much of the server lights up as accessible.</p>
+      <div class="control-row">
+        <select id="pm-scope-sel">
+          <option value="table">ON tuf_sql.students — one table</option>
+          <option value="db">ON tuf_sql.* — whole database</option>
+          <option value="server">ON *.* — entire server</option>
+        </select>
+      </div>
+      <pre class="code" id="pm-scope-out"></pre>
+      <div id="pm-scope-viz" class="pm-tree"></div>
+      <div id="pm-scope-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">☢️</div>
+      <div><strong><code>GRANT ALL ON *.* </code> is God Mode.</strong> It makes the account a superuser — it can read, modify or <code>DROP</code> any database on the machine. Give it only to trusted admins, <em>never</em> to application users or developers.</div>
+    </div>
+  </div>
+
+  <!-- Roles & delegation -->
+  <div class="subsection" id="pm-roles">
+    <div class="sub-head"><div class="sub-tag">Scale · Playground</div><h2>Roles &amp; delegation</h2></div>
+
+    <div class="card">
+      <h3>Why roles?</h3>
+      <p class="muted">Imagine 50 engineers. Granting <code>SELECT</code> to each one is 50 queries — and one typo is a security hole. Instead, grant once to a <strong>role</strong>, then link users to it. Change the role later and all 50 update instantly.</p>
+      <pre class="code">CREATE ROLE 'engineering';
+GRANT SELECT, INSERT, UPDATE ON tuf_sql.students TO 'engineering';
+GRANT 'engineering' TO 'raj_ip'@'192.168.65.1';</pre>
+    </div>
+
+    <div class="card">
+      <h3>🎮 The "default role" trap</h3>
+      <p class="muted">Granting a role to a user does <strong>not</strong> make it active at login. A common gotcha — toggle the switches and see whether <code>raj_ip</code> can actually run queries after connecting.</p>
+      <div class="control-row pm-priv-row">
+        <label class="pm-check"><input type="checkbox" id="pm-role-granted" checked> GRANT 'engineering' TO raj_ip</label>
+        <label class="pm-check"><input type="checkbox" id="pm-role-default"> SET DEFAULT ROLE 'engineering'</label>
+      </div>
+      <div id="pm-role-out" class="merge-note"></div>
+    </div>
+
+    <div class="card">
+      <h3>WITH GRANT OPTION — the power to delegate</h3>
+      <p class="muted">By default a user can use a privilege but can't pass it on. Add <code>WITH GRANT OPTION</code> and they can re-grant the same privileges to others (but never privileges they don't hold themselves). You can test this toggle back in the <a href="#pm-grant">GRANT playground</a>.</p>
+      <pre class="code">GRANT SELECT, INSERT ON tuf_sql.students
+TO 'raj'@'%'
+WITH GRANT OPTION;</pre>
+      <div class="card tip-card">
+        <div class="tip-icon">💥</div>
+        <div><strong>Privilege explosion.</strong> Raj grants to Neha, Neha grants to an intern… suddenly everyone has access and the admin has lost track of who holds the keys. If you don't want re-sharing, simply omit the keyword — that one phrase is a massive difference in control.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALTER USER -->
+  <div class="subsection" id="pm-alter">
+    <div class="sub-head"><div class="sub-tag">Account management · Reference</div><h2>ALTER USER — rotate &amp; lock</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>GRANT</code> changes <em>what a user can do</em>. <code>ALTER USER</code> changes <em>the account itself</em> — its password or login status. Admin-only.</p>
+      <h3>1 · Password rotation</h3>
+      <p class="muted">Change a password periodically, or immediately after a suspected leak. The old password dies instantly; new connections need the new one.</p>
+      <pre class="code">ALTER USER 'tuf_support'@'localhost' IDENTIFIED BY 'Temp#5678';</pre>
+
+      <h3>2 · Emergency lock</h3>
+      <p class="muted">Offboarding, suspicious activity, or a compromised device — block login instantly without deleting the account. Roles, grants and history stay intact, so you can restore access later.</p>
+      <pre class="code">ALTER USER 'tuf_support'@'localhost' ACCOUNT LOCK;</pre>
+
+      <h3>3 · Unlock</h3>
+      <p class="muted">The reverse. Login works again with the existing password; nothing was lost during the lockdown.</p>
+      <pre class="code">ALTER USER 'tuf_support'@'localhost' ACCOUNT UNLOCK;</pre>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🪤</div>
+      <div><strong>Lock beats DROP.</strong> <code>DROP USER</code> erases the account's whole setup — if it was a false alarm or the employee returns, you rebuild from scratch. <code>ACCOUNT LOCK</code> just freezes login and preserves everything.</div>
+    </div>
+  </div>
+
+  <!-- REVOKE -->
+  <div class="subsection" id="pm-revoke">
+    <div class="sub-head"><div class="sub-tag">The undo · Reference</div><h2>REVOKE — the opposite of GRANT</h2></div>
+
+    <div class="card">
+      <p class="muted"><code>REVOKE</code> removes privileges or roles. Same shape as <code>GRANT</code>, one keyword flips: <code>TO</code> becomes <code>FROM</code>. Run as admin.</p>
+      <h3>Revoke a role from a user</h3>
+      <pre class="code">REVOKE 'engineering' FROM 'raj_ip'@'192.168.65.1';</pre>
+      <p class="muted">All privileges coming <em>from that role</em> vanish for the user.</p>
+      <h3>Revoke specific privileges</h3>
+      <pre class="code">REVOKE INSERT, UPDATE ON tuf_sql.students FROM 'raj'@'%';</pre>
+      <p class="muted">Raj keeps anything still granted (e.g. <code>SELECT</code>) but loses the revoked ones — an <code>INSERT</code> now fails with "permission denied".</p>
+    </div>
+  </div>
+
+  <!-- Quiz -->
+  <div class="subsection" id="pm-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Lock it in</h2></div>
+
+    <div class="card">
+      <h3>🎮 Which command?</h3>
+      <p class="muted">Pick the right DCL / account command for each scenario.</p>
+      <div id="pm-cmd"></div>
+      <div id="pm-cmd-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Will it succeed?</h3>
+      <p class="muted">raj has exactly <code>SELECT, INSERT</code> on <code>tuf_sql.students</code> — nothing else. Logged in as raj, does each statement work?</p>
+      <div id="pm-pf"></div>
+      <div id="pm-pf-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 User or role?</h3>
+      <p class="muted">Same <code>mysql.user</code> table — decide by the account's properties.</p>
+      <div id="pm-ur"></div>
+      <div id="pm-ur-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="permissions">
+      <span>Mark Permissions &amp; access control complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ==================== MODULE 14: TRANSACTIONS & CONCURRENCY ==================== -->
+<section class="lesson" id="transactions" data-title="Transactions &amp; concurrency">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 14</div>
+    <h1>Transactions &amp; concurrency</h1>
+    <p class="lede">A transaction makes many statements behave as one <strong>atomic</strong> unit — all succeed, or none do. Below: how connections carry transaction state, what <code>COMMIT</code> / <code>ROLLBACK</code> / <code>SAVEPOINT</code> really do, what InnoDB does under the hood, and how locks turn into timeouts and deadlocks.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#tx-conn">Connections &amp; pools</a>
+    <a href="#tx-commit">COMMIT &amp; ROLLBACK</a>
+    <a href="#tx-savepoint">SAVEPOINT</a>
+    <a href="#tx-internals">Inside InnoDB</a>
+    <a href="#tx-deadlock">Timeout &amp; deadlock</a>
+    <a href="#tx-game">Quiz</a>
+  </nav>
+
+  <!-- Connections & pools -->
+  <div class="subsection" id="tx-conn">
+    <div class="sub-head"><div class="sub-tag">Foundations · Playground</div><h2>Connections &amp; connection pools</h2></div>
+
+    <div class="card">
+      <h3>What is a connection?</h3>
+      <p class="muted">A <strong>connection</strong> is a single live channel between your app and the MySQL server. Every connection has a <code>connection_id</code>, and it is <strong>stateful</strong> — session variables and in-progress transaction state live <em>inside that one connection</em>. Kill the connection and that state is gone.</p>
+      <div class="card tip-card">
+        <div class="tip-icon">🔀</div>
+        <div><strong>Why does <code>connection_id</code> keep alternating (73, 74, 75…)?</strong> Your tool is using a <em>connection pool</em> and handing out connections round-robin — so each query may run on a different connection.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Pool vs single connection</h3>
+      <p class="muted">Opening a fresh DB connection every time is slow. A <strong>pool</strong> keeps several open and reuses them: it hands out a free one, runs the query, returns it. Fire three simultaneous requests each way and watch the difference.</p>
+      <div class="control-row" id="tx-pool-mode">
+        <button class="fbtn on" data-m="pool">Connection pool (3 conns)</button>
+        <button class="fbtn" data-m="single">Single connection</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="tx-pool-send">▶ Send 3 requests</button>
+      </div>
+      <div id="tx-pool-viz" class="tx-pool"></div>
+      <div id="tx-pool-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- COMMIT & ROLLBACK -->
+  <div class="subsection" id="tx-commit">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>COMMIT &amp; ROLLBACK</h2></div>
+
+    <div class="card">
+      <p class="muted">Outside a transaction MySQL <strong>auto-commits</strong> each statement. Inside one, nothing is final until you <code>COMMIT</code> — and <code>ROLLBACK</code> throws all of it away, restoring the last committed state.</p>
+      <pre class="code">START TRANSACTION;
+  UPDATE students SET status = 'ACTIVE' WHERE student_id = 1;
+  UPDATE students SET city = 'Delhi'   WHERE student_id = 1;
+COMMIT;   -- or ROLLBACK to discard both</pre>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Run a transaction, then keep or discard it</h3>
+      <p class="muted">Start a transaction, apply the two updates, then choose <code>COMMIT</code> or <code>ROLLBACK</code>. The right panel is what <em>another session</em> sees — proof that uncommitted changes stay invisible (MVCC).</p>
+      <div class="control-row tx-sim-controls" id="tx-sim-controls">
+        <button class="fbtn" data-act="start">START TRANSACTION</button>
+        <button class="fbtn" data-act="status" disabled>UPDATE status='ACTIVE'</button>
+        <button class="fbtn" data-act="city" disabled>UPDATE city='Delhi'</button>
+        <button class="fbtn" data-act="commit" disabled>COMMIT</button>
+        <button class="fbtn" data-act="rollback" disabled>ROLLBACK</button>
+        <button class="fbtn" data-act="reset">↺ Reset</button>
+      </div>
+      <div class="tx-log" id="tx-sim-log"></div>
+      <div class="dual-source">
+        <div><div class="src-label">Your session (in transaction)</div><div id="tx-sim-mine"></div></div>
+        <div><div class="src-label">Another session sees (committed)</div><div id="tx-sim-other"></div></div>
+      </div>
+      <div id="tx-sim-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- SAVEPOINT -->
+  <div class="subsection" id="tx-savepoint">
+    <div class="sub-head"><div class="sub-tag">Partial undo · Playground</div><h2>SAVEPOINT — undo just part of the work</h2></div>
+
+    <div class="card">
+      <p class="muted">A <code>SAVEPOINT</code> is a bookmark inside a transaction. <code>ROLLBACK TO SAVEPOINT</code> undoes only the work <em>after</em> the bookmark and keeps everything before it — the transaction stays open.</p>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Step through a savepoint</h3>
+      <p class="muted">We insert an enrollment, bookmark, then attempt a balance transfer — but roll the transfer back to the savepoint while keeping the enrollment. Step through and watch which changes survive the final <code>COMMIT</code>.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="tx-sp-step">▶ Next step</button>
+        <button class="btn" id="tx-sp-reset">↺ Reset</button>
+      </div>
+      <pre class="code" id="tx-sp-code"></pre>
+      <div class="dual-source">
+        <div><div class="src-label">accounts</div><div id="tx-sp-accounts"></div></div>
+        <div><div class="src-label">enrollments (new this txn)</div><div id="tx-sp-enroll"></div></div>
+      </div>
+      <div id="tx-sp-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Inside InnoDB -->
+  <div class="subsection" id="tx-internals">
+    <div class="sub-head"><div class="sub-tag">Under the hood · Reference</div><h2>Inside InnoDB</h2></div>
+
+    <div class="card">
+      <h3>What actually happens during a transaction?</h3>
+      <p class="muted">Click each piece to see its job. Together they explain how InnoDB can change data, still let others read the old version, undo on rollback, and survive a crash.</p>
+      <div class="click-grid three">
+        <button class="click-card" data-group="innodb" data-key="idb-start"><div class="cc-name">START</div><div class="cc-tag">txn id + read view</div></button>
+        <button class="click-card" data-group="innodb" data-key="idb-buffer"><div class="cc-name">Buffer pool</div><div class="cc-tag">dirty pages in RAM</div></button>
+        <button class="click-card" data-group="innodb" data-key="idb-lock"><div class="cc-name">Locks</div><div class="cc-tag">writes block writes</div></button>
+        <button class="click-card" data-group="innodb" data-key="idb-undo"><div class="cc-name">Undo log</div><div class="cc-tag">rollback + MVCC</div></button>
+        <button class="click-card" data-group="innodb" data-key="idb-redo"><div class="cc-name">Redo log</div><div class="cc-tag">crash safety</div></button>
+        <button class="click-card" data-group="innodb" data-key="idb-commit"><div class="cc-name">COMMIT</div><div class="cc-tag">finalize + release</div></button>
+      </div>
+      <div class="click-detail" data-group="innodb">Click a component above.</div>
+    </div>
+
+    <div class="card">
+      <h3>Undo log vs Redo log — don't mix them up</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th></th><th>Undo log</th><th>Redo log</th></tr></thead>
+        <tbody>
+          <tr><td>Purpose</td><td>Reverse changes</td><td>Replay changes</td></tr>
+          <tr><td>Used for</td><td><code>ROLLBACK</code> + MVCC reads</td><td>Durability after a crash</td></tr>
+          <tr><td>Holds</td><td>The <em>old</em> row version</td><td>The <em>new</em> change to re-apply</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Production warning.</strong> Transaction state lives on <em>one</em> connection. If you <code>START TRANSACTION</code> on one pooled connection and <code>COMMIT</code> on another, the commit does nothing useful — the state isn't there. Always run start → queries → commit/rollback on the <strong>same</strong> connection handle.</div>
+    </div>
+  </div>
+
+  <!-- Timeout & deadlock -->
+  <div class="subsection" id="tx-deadlock">
+    <div class="sub-head"><div class="sub-tag">Concurrency · Playground</div><h2>Timeout &amp; deadlock</h2></div>
+
+    <div class="card">
+      <p class="muted">A write takes a <strong>lock</strong> on its rows until commit/rollback. If another transaction wants the same row it <em>waits</em> — and if it waits too long, it <strong>times out</strong> and fails instead of hanging forever.</p>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Build a deadlock</h3>
+      <p class="muted">Two transactions grab locks in the opposite order. Step through and watch them lock each other out — then see how MySQL breaks the tie.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="tx-dl-step">▶ Next step</button>
+        <button class="btn" id="tx-dl-reset">↺ Reset</button>
+      </div>
+      <div class="tx-dl-grid">
+        <div class="tx-txn-col"><div class="src-label">Transaction 1</div><div class="txn-steps" id="tx-dl-t1"></div></div>
+        <div class="tx-txn-col"><div class="src-label">Transaction 2</div><div class="txn-steps" id="tx-dl-t2"></div></div>
+      </div>
+      <div id="tx-dl-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Quiz -->
+  <div class="subsection" id="tx-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Lock it in</h2></div>
+
+    <div class="card">
+      <h3>🎮 Which keyword?</h3>
+      <p class="muted">Pick the right transaction control for each goal.</p>
+      <div id="tx-cmd"></div>
+      <div id="tx-cmd-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 What survives?</h3>
+      <p class="muted">Reason about the final state after each transaction.</p>
+      <div id="tx-survive"></div>
+      <div id="tx-survive-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Concept check</h3>
+      <p class="muted">Connections, logs, locks &amp; concurrency.</p>
+      <div id="tx-concept"></div>
+      <div id="tx-concept-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="transactions">
+      <span>Mark Transactions &amp; concurrency complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
