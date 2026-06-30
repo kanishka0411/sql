@@ -3290,3 +3290,297 @@ buildClassify('tx-concept', 'tx-concept-score', [
   { label: 'Concept', prompt: 'Two txns lock each other\'s rows in opposite order, forever', options: [opt('Deadlock', true), opt('Timeout'), opt('Dirty read')], why: 'Mutual waiting = deadlock; MySQL rolls back one victim.' },
   { label: 'Concept', prompt: 'A modified page sitting in RAM, not yet flushed to disk', options: [opt('Dirty page', true), opt('Redo log'), opt('Read view')], why: 'Changed-in-buffer-pool-but-unflushed = a dirty page.' }
 ]);
+
+
+// ============ MODULE 15: SUBQUERIES ============
+const sqUsers = [
+  { user_id: 1, name: 'Ayaan' }, { user_id: 2, name: 'Sneha' },
+  { user_id: 3, name: 'Rohit' }, { user_id: 4, name: 'Kavya' },
+  { user_id: 5, name: 'Zoya' },  { user_id: 6, name: 'Arjun' },
+  { user_id: 7, name: '' },      { user_id: 8, name: null }
+];
+const sqProducts = [
+  { product_id: 10, product: 'Tablet' },
+  { product_id: 11, product: 'Headphones' },
+  { product_id: 12, product: 'Keyboard' }   // never sold
+];
+// clean 4-order teaching set: status + placed_at_utc; Keyboard (12) never appears
+const sqOrders = [
+  { order_id: 101, user_id: 1, product_id: 10, amount: 1200.00, status: 'PAID',      placed_at_utc: '2026-01-09 10:00:00' },
+  { order_id: 102, user_id: 1, product_id: 11, amount: 300.00,  status: 'CANCELLED', placed_at_utc: '2026-01-11 09:00:00' },
+  { order_id: 104, user_id: 3, product_id: 10, amount: 1100.00, status: 'PAID',      placed_at_utc: '2026-01-10 12:00:00' },
+  { order_id: 106, user_id: 4, product_id: 11, amount: 400.00,  status: 'PAID',      placed_at_utc: '2026-01-12 14:00:00' }
+];
+const sqEmployees = [
+  { name: 'Asha',   department: 'Engineering', salary: 95000 },
+  { name: 'Vikram', department: 'Engineering', salary: 80000 },
+  { name: 'Neel',   department: 'Engineering', salary: 110000 },
+  { name: 'Priya',  department: 'Sales',       salary: 60000 },
+  { name: 'Rahul',  department: 'Sales',       salary: 75000 },
+  { name: 'Diya',   department: 'HR',          salary: 55000 }
+];
+const sqUserById = id => sqUsers.find(u => u.user_id === id) || null;
+const sq2 = v => (v === null || v === undefined) ? null : Number(v).toFixed(2);
+const sqUserMax = uid => {
+  const a = sqOrders.filter(o => o.user_id === uid && o.amount !== null).map(o => o.amount);
+  return a.length ? Math.max(...a) : null;
+};
+
+// source tables
+const sqUsersSrc = document.getElementById('sq-users-src');
+if (sqUsersSrc) {
+  sqUsersSrc.innerHTML = uTable(sqUsers, ['user_id', 'name']);
+  document.getElementById('sq-prod-src').innerHTML = uTable(sqProducts, ['product_id', 'product']);
+  document.getElementById('sq-ord-src').innerHTML = uTable(
+    sqOrders.map(o => ({ ...o, amount: sq2(o.amount) })),
+    ['order_id', 'user_id', 'product_id', 'amount', 'status', 'placed_at_utc']);
+}
+
+// generic segmented-control wiring
+function sqSeg(segId, attr, onPick) {
+  const seg = document.getElementById(segId);
+  if (!seg) return;
+  seg.querySelectorAll('.seg-btn').forEach(b => b.addEventListener('click', () => {
+    seg.querySelectorAll('.seg-btn').forEach(x => x.classList.toggle('active', x === b));
+    onPick(b.dataset[attr]);
+  }));
+}
+
+// --- scalar subquery in SELECT ---
+const sqScalarMode = document.getElementById('sq-scalar-mode');
+if (sqScalarMode) {
+  const out = document.getElementById('sq-scalar-out');
+  const res = document.getElementById('sq-scalar-res');
+  const note = document.getElementById('sq-scalar-note');
+  function runScalar() {
+    const mode = sqScalarMode.value;
+    let sub, col, note_;
+    if (mode === 'name') {
+      sub = '(SELECT u.name FROM users u WHERE u.user_id = o.user_id)';
+      col = 'name';
+      note_ = 'For each order, the subquery finds the one matching user and returns their name — a JOIN-free lookup.';
+    } else if (mode === 'count') {
+      sub = '(SELECT COUNT(*) FROM orders o2 WHERE o2.user_id = o.user_id)';
+      col = 'user_orders';
+      note_ = 'The subquery counts every order sharing this row\'s user_id, so a user\'s rows all show the same total.';
+    } else {
+      sub = '(SELECT MAX(o2.amount) FROM orders o2 WHERE o2.user_id = o.user_id)';
+      col = 'user_max';
+      note_ = 'MAX() runs per user_id, so each order shows that user\'s peak amount.';
+    }
+    out.textContent = `SELECT o.order_id,\n       ${sub} AS ${col}\nFROM orders o;`;
+    const rows = sqOrders.map(o => {
+      let val;
+      if (mode === 'name') { const u = sqUserById(o.user_id); val = u ? u.name : null; }
+      else if (mode === 'count') val = sqOrders.filter(x => x.user_id === o.user_id).length;
+      else val = sq2(sqUserMax(o.user_id));
+      return { order_id: o.order_id, [col]: val };
+    });
+    res.innerHTML = uTable(rows, ['order_id', col]);
+    note.innerHTML = note_;
+  }
+  sqScalarMode.addEventListener('change', runScalar);
+  runScalar();
+}
+
+// --- subquery with IN ---
+const sqInScenario = document.getElementById('sq-in-scenario');
+if (sqInScenario) {
+  const out = document.getElementById('sq-in-out');
+  const list = document.getElementById('sq-in-list');
+  const res = document.getElementById('sq-in-res');
+  function runIn() {
+    const s = sqInScenario.value;
+    if (s === 'any') {
+      const ids = [...new Set(sqOrders.map(o => o.user_id))].sort((a, b) => a - b);
+      out.textContent = `SELECT u.user_id\nFROM users u\nWHERE u.user_id IN (\n  SELECT DISTINCT o.user_id FROM orders o\n);`;
+      list.innerHTML = `Inner list → <code>${ids.join(', ')}</code>`;
+      res.innerHTML = uTable(sqUsers.filter(u => ids.includes(u.user_id)).map(u => ({ user_id: u.user_id })), ['user_id']);
+    } else {
+      const pname = s === 'tablet' ? 'Tablet' : 'Headphones';
+      const pids = sqProducts.filter(p => p.product === pname).map(p => p.product_id);
+      out.textContent = `SELECT o.user_id, o.product_id\nFROM orders o\nWHERE o.product_id IN (\n  SELECT p.product_id FROM products p\n  WHERE p.product = '${pname}'\n);`;
+      list.innerHTML = `Inner list (${pname}) → <code>${pids.join(', ')}</code>`;
+      res.innerHTML = uTable(
+        sqOrders.filter(o => pids.includes(o.product_id)).map(o => ({ user_id: o.user_id, product_id: o.product_id })),
+        ['user_id', 'product_id']);
+    }
+  }
+  sqInScenario.addEventListener('change', runIn);
+  runIn();
+}
+
+// --- EXISTS / NOT EXISTS ---
+const sqExistsOut = document.getElementById('sq-exists-out');
+if (sqExistsOut) {
+  const res = document.getElementById('sq-exists-res');
+  const note = document.getElementById('sq-exists-note');
+  let exMode = 'exists', exThresh = 0;
+  function runExists() {
+    const t = exThresh;
+    const cond = t > 0 ? `\n    AND o.amount >= ${t}` : '';
+    const kw = exMode === 'exists' ? 'EXISTS' : 'NOT EXISTS';
+    sqExistsOut.textContent = `SELECT u.user_id, u.name\nFROM users u\nWHERE ${kw} (\n  SELECT 1 FROM orders o\n  WHERE o.user_id = u.user_id${cond}\n);`;
+    const has = u => sqOrders.some(o => o.user_id === u.user_id && (t === 0 || (o.amount !== null && o.amount >= t)));
+    const rows = sqUsers.filter(u => exMode === 'exists' ? has(u) : !has(u));
+    res.innerHTML = uTable(rows, ['user_id', 'name']);
+    note.innerHTML = exMode === 'exists'
+      ? (t > 0 ? `Kept: users with at least one order ≥ ${t}. NULL amounts never satisfy <code>&gt;= ${t}</code>.`
+               : 'Kept: every user who has placed even one order.')
+      : (t > 0 ? `Kept: users with <em>no</em> order ≥ ${t} (includes users who never ordered).`
+               : 'Kept: users with no order at all — the safe anti-join, NULL names and all.');
+  }
+  sqSeg('sq-exists-mode', 'mode', m => { exMode = m; runExists(); });
+  sqSeg('sq-exists-thresh', 'thresh', t => { exThresh = Number(t); runExists(); });
+  runExists();
+}
+
+// --- EXISTS in the wild ---
+const sqCasePick = document.getElementById('sq-case-pick');
+if (sqCasePick) {
+  const out = document.getElementById('sq-case-out');
+  const res = document.getElementById('sq-case-res');
+  const note = document.getElementById('sq-case-note');
+  function runCase() {
+    const c = sqCasePick.value;
+    if (c === 'sold' || c === 'unsold') {
+      const not = c === 'unsold';
+      out.textContent = `SELECT p.product_id, p.product\nFROM products p\nWHERE ${not ? 'NOT EXISTS' : 'EXISTS'} (\n  SELECT 1 FROM orders o WHERE o.product_id = p.product_id\n);`;
+      const rows = sqProducts.filter(p => {
+        const sold = sqOrders.some(o => o.product_id === p.product_id);
+        return not ? !sold : sold;
+      });
+      res.innerHTML = uTable(rows, ['product_id', 'product']);
+      note.innerHTML = not
+        ? 'Keyboard never appears in orders, so it\'s the only product NOT EXISTS keeps — perfect for spotting dead inventory.'
+        : 'Tablet and Headphones each have at least one sale; Keyboard is filtered out.';
+    } else if (c === 'cancelled') {
+      out.textContent = `SELECT u.name\nFROM users u\nWHERE EXISTS (\n  SELECT 1 FROM orders o\n  WHERE o.user_id = u.user_id\n    AND o.status = 'CANCELLED'\n);`;
+      const rows = sqUsers.filter(u => sqOrders.some(o => o.user_id === u.user_id && o.status === 'CANCELLED'));
+      res.innerHTML = uTable(rows, ['name']);
+      note.innerHTML = 'Order 102 (Ayaan) is CANCELLED, so only Ayaan matches.';
+    } else {
+      out.textContent = `SELECT u.user_id, u.name\nFROM users u\nWHERE NOT EXISTS (\n  SELECT 1 FROM products p\n  WHERE NOT EXISTS (\n    SELECT 1 FROM orders o\n    WHERE o.user_id = u.user_id\n      AND o.product_id = p.product_id\n  )\n);`;
+      const rows = sqUsers.filter(u =>
+        sqProducts.every(p => sqOrders.some(o => o.user_id === u.user_id && o.product_id === p.product_id)));
+      res.innerHTML = uTable(rows, ['user_id', 'name']);
+      note.innerHTML = 'Double negative: "there is no product this user has NOT bought." With Keyboard unsold by everyone, nobody qualifies for all three — so this returns 0 rows here.';
+    }
+  }
+  sqCasePick.addEventListener('change', runCase);
+  runCase();
+}
+
+// --- NOT IN trap (live toggle) ---
+const sqTrapNull = document.getElementById('sq-trap-null');
+if (sqTrapNull) {
+  const notinEl = document.getElementById('sq-trap-notin');
+  const neEl = document.getElementById('sq-trap-ne');
+  const note = document.getElementById('sq-trap-note');
+  function runTrap() {
+    const orders = sqTrapNull.checked
+      ? [...sqOrders, { order_id: 199, user_id: 4, product_id: null, amount: 0, status: 'REFUND', placed_at_utc: '2026-01-13 08:00:00' }]
+      : sqOrders;
+    const pids = orders.map(o => o.product_id);
+    const hasNull = pids.includes(null);
+    const notInRows = hasNull ? [] : sqProducts.filter(p => !pids.includes(p.product_id));
+    const neRows = sqProducts.filter(p => !orders.some(o => o.product_id === p.product_id));
+    notinEl.innerHTML = uTable(notInRows, ['product_id', 'product']);
+    neEl.innerHTML = uTable(neRows, ['product_id', 'product']);
+    note.innerHTML = hasNull
+      ? 'A <code>NULL</code> is now in the inner list, so every <code>product_id NOT IN (…, NULL)</code> is <em>unknown</em> — never TRUE. <code>NOT IN</code> returns 0 rows; <code>NOT EXISTS</code> still finds Keyboard.'
+      : 'No NULLs in the list, so both agree on Keyboard. Tick the box to break <code>NOT IN</code>.';
+  }
+  sqTrapNull.addEventListener('change', runTrap);
+  runTrap();
+}
+
+// --- correlated subquery: max per user / which order ---
+const sqCorrOut = document.getElementById('sq-corr-out');
+if (sqCorrOut) {
+  const res = document.getElementById('sq-corr-res');
+  const note = document.getElementById('sq-corr-note');
+  function runCorr(mode) {
+    if (mode === 'peruser') {
+      sqCorrOut.textContent = `SELECT u.user_id, u.name,\n       (SELECT MAX(o.amount) FROM orders o\n        WHERE o.user_id = u.user_id) AS max_amount\nFROM users u\nWHERE EXISTS (\n  SELECT 1 FROM orders o WHERE o.user_id = u.user_id\n)\nORDER BY max_amount DESC;`;
+      const rows = sqUsers
+        .filter(u => sqOrders.some(o => o.user_id === u.user_id))
+        .map(u => ({ user_id: u.user_id, name: u.name, max_amount: sq2(sqUserMax(u.user_id)) }))
+        .sort((a, b) => Number(b.max_amount) - Number(a.max_amount));
+      res.innerHTML = uTable(rows, ['user_id', 'name', 'max_amount']);
+      note.innerHTML = 'The subquery re-runs per user; <code>EXISTS</code> drops order-less users.';
+    } else {
+      sqCorrOut.textContent = `SELECT o.user_id, o.product_id, o.amount\nFROM orders o\nWHERE o.amount = (\n  SELECT MAX(o2.amount) FROM orders o2\n  WHERE o2.user_id = o.user_id\n);`;
+      const rows = sqOrders
+        .filter(o => o.amount !== null && o.amount === sqUserMax(o.user_id))
+        .map(o => ({ user_id: o.user_id, product_id: o.product_id, amount: sq2(o.amount) }));
+      res.innerHTML = uTable(rows, ['user_id', 'product_id', 'amount']);
+      note.innerHTML = 'Keeps the actual order rows whose amount equals that user\'s max. Ties would all appear.';
+    }
+  }
+  sqSeg('sq-corr-seg', 'mode', runCorr);
+  runCorr('peruser');
+}
+
+// --- row-by-row cases ---
+const sqRbrPick = document.getElementById('sq-rbr-pick');
+if (sqRbrPick) {
+  const out = document.getElementById('sq-rbr-out');
+  const res = document.getElementById('sq-rbr-res');
+  const note = document.getElementById('sq-rbr-note');
+  function runRbr() {
+    const c = sqRbrPick.value;
+    if (c === 'lastorder') {
+      out.textContent = `SELECT u.user_id, u.name,\n       (SELECT MAX(o.placed_at_utc) FROM orders o\n        WHERE o.user_id = u.user_id) AS last_order\nFROM users u\nWHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.user_id);`;
+      const rows = sqUsers
+        .filter(u => sqOrders.some(o => o.user_id === u.user_id))
+        .map(u => {
+          const ts = sqOrders.filter(o => o.user_id === u.user_id).map(o => o.placed_at_utc).sort();
+          return { user_id: u.user_id, name: u.name, last_order: ts[ts.length - 1] };
+        });
+      res.innerHTML = uTable(rows, ['user_id', 'name', 'last_order']);
+      note.innerHTML = 'MAX over a timestamp = the latest order — a "last seen" signal per user.';
+    } else if (c === 'prevcount') {
+      out.textContent = `SELECT o1.order_id, o1.user_id,\n       (SELECT COUNT(*) FROM orders o2\n        WHERE o2.user_id = o1.user_id\n          AND o2.placed_at_utc < o1.placed_at_utc) AS previous_orders\nFROM orders o1\nORDER BY o1.order_id;`;
+      const rows = [...sqOrders]
+        .sort((a, b) => a.order_id - b.order_id)
+        .map(o1 => ({
+          order_id: o1.order_id,
+          user_id: o1.user_id,
+          previous_orders: sqOrders.filter(o2 => o2.user_id === o1.user_id && o2.placed_at_utc < o1.placed_at_utc).length
+        }));
+      res.innerHTML = uTable(rows, ['order_id', 'user_id', 'previous_orders']);
+      note.innerHTML = 'For each order, count the same user\'s earlier orders — order 102 has 1 (order 101 came first).';
+    } else {
+      out.textContent = `SELECT e1.name, e1.department, e1.salary\nFROM employees e1\nWHERE e1.salary > (\n  SELECT AVG(e2.salary) FROM employees e2\n  WHERE e2.department = e1.department\n);`;
+      const rows = sqEmployees.filter(e1 => {
+        const dept = sqEmployees.filter(e2 => e2.department === e1.department);
+        const avg = dept.reduce((s, e) => s + e.salary, 0) / dept.length;
+        return e1.salary > avg;
+      }).map(e => ({ name: e.name, department: e.department, salary: e.salary }));
+      res.innerHTML = uTable(rows, ['name', 'department', 'salary']);
+      note.innerHTML = 'The AVG re-computes per department: Neel beats Engineering\'s 95,000 and Rahul beats Sales\' 67,500.';
+    }
+  }
+  sqRbrPick.addEventListener('change', runRbr);
+  runRbr();
+}
+
+// --- games ---
+buildClassify('sq-tool', 'sq-tool-score', [
+  { label: 'Goal', prompt: 'Keep orders whose product_id is one of a set returned by another query', options: [opt('IN', true), opt('EXISTS'), opt('NOT EXISTS')], why: 'You need to match against a list of values → IN.' },
+  { label: 'Goal', prompt: 'Users who placed at least one order (just presence)', options: [opt('EXISTS', true), opt('IN'), opt('NOT IN')], why: 'Pure presence check that can stop at the first match → EXISTS.' },
+  { label: 'Goal', prompt: 'Products never sold, and product_id may be NULL in orders', options: [opt('NOT EXISTS', true), opt('NOT IN'), opt('IN')], why: 'NOT EXISTS is NULL-safe; NOT IN can silently return nothing.' },
+  { label: 'Goal', prompt: 'Show each order with its user\'s name inline in the SELECT list', options: [opt('Scalar subquery', true), opt('EXISTS'), opt('IN')], why: 'A subquery returning one value can sit in the SELECT list.' },
+  { label: 'Goal', prompt: 'Each employee who earns above their own department\'s average', options: [opt('Correlated subquery', true), opt('Simple subquery'), opt('IN')], why: 'The average depends on the current row\'s department → it must correlate.' },
+  { label: 'Pick', prompt: 'Inside EXISTS you should select…', options: [opt('SELECT 1', true), opt('SELECT *'), opt('SELECT every column')], why: 'EXISTS only checks for a row\'s presence; SELECT 1 avoids wasted work.' }
+]);
+
+buildClassify('sq-predict', 'sq-predict-score', [
+  { label: 'Predict', prompt: 'WHERE user_id IN (SELECT DISTINCT user_id FROM orders) — how many users?', options: [opt('3', true), opt('6'), opt('8')], why: 'Only users 1, 3, 4 appear in orders.' },
+  { label: 'Predict', prompt: 'EXISTS with amount >= 500 — which users?', options: [opt('1 and 3', true), opt('1, 3, 4'), opt('1 only')], why: 'Only Ayaan (1200) and Rohit (1100) have an order ≥ 500; Kavya\'s max is 400.' },
+  { label: 'Predict', prompt: 'NOT EXISTS (any order) — how many users returned?', options: [opt('5', true), opt('3'), opt('8')], why: 'Users 2, 5, 6, 7, 8 never ordered → 5 rows.' },
+  { label: 'Predict', prompt: 'Products WHERE NOT EXISTS a matching order — which?', options: [opt('Keyboard only', true), opt('Tablet & Keyboard'), opt('None')], why: 'Keyboard (12) never appears in orders.' },
+  { label: 'Predict', prompt: 'product_id NOT IN (a list that contains a NULL) — rows?', options: [opt('Zero — NULL poisons the list', true), opt('All products'), opt('Just Keyboard')], why: 'A NULL in the list makes every NOT IN test unknown → no rows.' },
+  { label: 'Predict', prompt: 'Counting an order\'s previous orders — order 102\'s value?', options: [opt('1', true), opt('0'), opt('2')], why: 'Order 101 (same user, earlier timestamp) precedes it → 1.' }
+]);

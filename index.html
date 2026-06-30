@@ -3422,6 +3422,301 @@ COMMIT;   -- or ROLLBACK to discard both</pre>
   </div>
 </section>
 
+<!-- ==================== MODULE 15: SUBQUERIES ==================== -->
+<section class="lesson" id="subqueries" data-title="Subqueries">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 15</div>
+    <h1>Subqueries</h1>
+    <p class="lede">A subquery is just a <code>SELECT</code> living inside another statement. SQL runs the <strong>inner</strong> query first, then hands its result to the <strong>outer</strong> query to finish the job. You'll meet them in the <code>SELECT</code> list, inside <code>IN</code> / <code>EXISTS</code>, and — the powerful kind — <strong>correlated</strong>, re-running once per outer row.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#sq-setup">The three tables</a>
+    <a href="#sq-scalar">Scalar in SELECT</a>
+    <a href="#sq-in">Subquery with IN</a>
+    <a href="#sq-exists">EXISTS &amp; NOT EXISTS</a>
+    <a href="#sq-cases">EXISTS in the wild</a>
+    <a href="#sq-mistakes">Common mistakes</a>
+    <a href="#sq-correlated">Correlated</a>
+    <a href="#sq-corr-cases">Row-by-row</a>
+    <a href="#sq-cheat">Simple vs correlated</a>
+    <a href="#sq-game">Capstone game</a>
+  </nav>
+
+  <div class="card">
+    <h3>Inner first, outer second</h3>
+    <p class="muted">Read any subquery from the inside out. The inner <code>SELECT</code> produces a value, a list, or a yes/no — then the outer query uses it. The shape of what comes back decides where it can plug in.</p>
+    <table class="comparison-tbl">
+      <thead><tr><th>Returns…</th><th>Plugs into…</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>One value (scalar)</td><td><code>SELECT</code> list or <code>=</code> / <code>&gt;</code> compare</td><td>"the name for this order"</td></tr>
+        <tr><td>A list of values</td><td><code>IN</code> / <code>NOT IN</code></td><td>"users who appear in orders"</td></tr>
+        <tr><td>Rows (or none)</td><td><code>EXISTS</code> / <code>NOT EXISTS</code></td><td>"does any order exist?"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- The three tables -->
+  <div class="subsection" id="sq-setup">
+    <div class="sub-head"><div class="sub-tag">Setup · Reference</div><h2>The three tables</h2></div>
+
+    <div class="card">
+      <p class="muted">A small e-commerce slice. Note the deliberate gaps: users <code>2, 5, 6</code> never order, user <code>7</code> has an empty name and <code>8</code> a <code>NULL</code> one, the <strong>Keyboard</strong> is never sold, and order <code>102</code> is <code>CANCELLED</code>. Orders also carry a <code>status</code> and a <code>placed_at_utc</code> timestamp we'll use later.</p>
+      <div class="dual-source">
+        <div><div class="src-label">users</div><div id="sq-users-src"></div></div>
+        <div><div class="src-label">products</div><div id="sq-prod-src"></div></div>
+      </div>
+      <div style="margin-top:14px;"><div class="src-label">orders</div><div id="sq-ord-src"></div></div>
+    </div>
+  </div>
+
+  <!-- Scalar subquery -->
+  <div class="subsection" id="sq-scalar">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>Scalar subquery in the SELECT list</h2></div>
+
+    <div class="card">
+      <h3>🎮 One value per order row — no JOIN needed</h3>
+      <p class="muted">When a subquery returns exactly one value, you can drop it straight into the <code>SELECT</code> list. It runs once per outer row, using that row's <code>o.user_id</code>. Pick what each order should look up:</p>
+      <div class="control-row">
+        <select id="sq-scalar-mode">
+          <option value="name" selected>the user's name</option>
+          <option value="count">how many orders that user has</option>
+          <option value="max">that user's biggest order amount</option>
+        </select>
+      </div>
+      <pre class="code" id="sq-scalar-out"></pre>
+      <div id="sq-scalar-res"></div>
+      <div id="sq-scalar-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🐢</div>
+      <div><strong>Handy, but not free.</strong> A scalar subquery in <code>SELECT</code> re-runs for every output row — great for a quick lookup, usually slower than a <code>JOIN</code> on large tables.</div>
+    </div>
+  </div>
+
+  <!-- IN -->
+  <div class="subsection" id="sq-in">
+    <div class="sub-head"><div class="sub-tag">Lists · Playground</div><h2>Subquery with IN</h2></div>
+
+    <div class="card">
+      <h3>🎮 The inner query builds the filter list</h3>
+      <p class="muted"><code>IN</code> checks whether a value matches anything in a list. Instead of hardcoding <code>IN (1, 3, 4)</code>, we let the subquery find the IDs. Watch the generated list, then the rows it keeps:</p>
+      <div class="control-row">
+        <select id="sq-in-scenario">
+          <option value="any" selected>Users who placed any order</option>
+          <option value="tablet">Orders for a Tablet</option>
+          <option value="headphones">Orders for Headphones</option>
+        </select>
+      </div>
+      <pre class="code" id="sq-in-out"></pre>
+      <div class="merge-note" id="sq-in-list"></div>
+      <div id="sq-in-res"></div>
+    </div>
+
+    <div class="card">
+      <h3>Subqueries vs JOINs — when to reach for each</h3>
+      <p class="muted">Subqueries read like "Step 1, then Step 2"; JOINs are often faster for the engine. Reach for a subquery when you're <strong>filtering</strong> a <code>WHERE</code> against a separate list, or comparing each row to an <strong>aggregate</strong> (like an average).</p>
+      <table class="comparison-tbl">
+        <thead><tr><th>Use a subquery when…</th><th>Use a JOIN when…</th></tr></thead>
+        <tbody>
+          <tr><td>Filtering by a list from another query</td><td>You need columns from both tables in the output</td></tr>
+          <tr><td>Comparing a row to an aggregate value</td><td>Performance matters on large tables</td></tr>
+          <tr><td>The logic reads cleaner as discrete steps</td><td>You're stitching related rows together</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- EXISTS / NOT EXISTS -->
+  <div class="subsection" id="sq-exists">
+    <div class="sub-head"><div class="sub-tag">Presence · Playground</div><h2>EXISTS &amp; NOT EXISTS</h2></div>
+
+    <div class="card">
+      <h3>🎮 Does any matching row exist?</h3>
+      <p class="muted"><code>EXISTS</code> returns TRUE the instant the correlated subquery finds one row — values don't matter, so <code>SELECT 1</code> is the idiom. <code>NOT EXISTS</code> is the opposite: true when nothing is found. Flip between them and raise the bar:</p>
+      <div class="control-row">
+        <div class="seg" id="sq-exists-mode">
+          <button class="seg-btn active" data-mode="exists">EXISTS — has an order</button>
+          <button class="seg-btn" data-mode="notexists">NOT EXISTS — never ordered</button>
+        </div>
+        <div class="seg" id="sq-exists-thresh">
+          <button class="seg-btn active" data-thresh="0">any amount</button>
+          <button class="seg-btn" data-thresh="500">amount ≥ 500</button>
+        </div>
+      </div>
+      <pre class="code" id="sq-exists-out"></pre>
+      <div id="sq-exists-res"></div>
+      <div id="sq-exists-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚡</div>
+      <div><strong>EXISTS short-circuits.</strong> <code>IN</code> must build the full list of inner values first; <code>EXISTS</code> stops at the first match. And <code>NOT EXISTS</code> is NULL-safe — <code>NOT IN</code> can return zero rows if the inner list contains a single <code>NULL</code>.</div>
+    </div>
+  </div>
+
+  <!-- EXISTS in the wild -->
+  <div class="subsection" id="sq-cases">
+    <div class="sub-head"><div class="sub-tag">Cases · Playground</div><h2>EXISTS in the wild</h2></div>
+
+    <div class="card">
+      <h3>🎮 Four real questions, one pattern</h3>
+      <p class="muted">Same presence/absence idea aimed at different tables and conditions:</p>
+      <div class="control-row">
+        <select id="sq-case-pick">
+          <option value="sold" selected>Products that HAVE sold (EXISTS)</option>
+          <option value="unsold">Products NEVER sold (NOT EXISTS)</option>
+          <option value="cancelled">Users with a CANCELLED order</option>
+          <option value="superuser">The "super user" who bought everything</option>
+        </select>
+      </div>
+      <pre class="code" id="sq-case-out"></pre>
+      <div id="sq-case-res"></div>
+      <div id="sq-case-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Common mistakes -->
+  <div class="subsection" id="sq-mistakes">
+    <div class="sub-head"><div class="sub-tag">Pitfalls</div><h2>Common mistakes to avoid</h2></div>
+
+    <div class="card">
+      <h3>⚠️ The NOT IN + NULL trap — live</h3>
+      <p class="muted">"Which products were never sold?" answered two ways. With clean data both agree on <strong>Keyboard</strong>. Now inject one refund-style order whose <code>product_id</code> is <code>NULL</code> and watch <code>NOT IN</code> collapse to nothing while <code>NOT EXISTS</code> stays correct.</p>
+      <div class="control-row">
+        <label class="complete-check" style="margin:0;">
+          <input type="checkbox" id="sq-trap-null">
+          <span>Inject an order with <code>product_id = NULL</code></span>
+        </label>
+      </div>
+      <div class="dual-source">
+        <div>
+          <div class="src-label">NOT IN</div>
+          <pre class="code">SELECT p.product_id, p.product
+FROM products p
+WHERE p.product_id NOT IN (
+  SELECT o.product_id FROM orders o
+);</pre>
+          <div id="sq-trap-notin"></div>
+        </div>
+        <div>
+          <div class="src-label">NOT EXISTS</div>
+          <pre class="code">SELECT p.product_id, p.product
+FROM products p
+WHERE NOT EXISTS (
+  SELECT 1 FROM orders o
+  WHERE o.product_id = p.product_id
+);</pre>
+          <div id="sq-trap-ne"></div>
+        </div>
+      </div>
+      <div class="merge-note" id="sq-trap-note"></div>
+    </div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Mistake</th><th>Why it bites</th><th>Do instead</th></tr></thead>
+        <tbody>
+          <tr><td><code>SELECT *</code> inside <code>EXISTS</code></td><td>Wastes work — the values are never read</td><td>Use <code>SELECT 1</code></td></tr>
+          <tr><td><code>NOT IN</code> over a NULL-able column</td><td>One <code>NULL</code> makes it return zero rows</td><td>Use <code>NOT EXISTS</code></td></tr>
+          <tr><td>Forgetting the correlation link</td><td>Inner query gives the same answer for every row</td><td>Tie it back: <code>WHERE o.user_id = u.user_id</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Correlated -->
+  <div class="subsection" id="sq-correlated">
+    <div class="sub-head"><div class="sub-tag">Correlated · Playground</div><h2>Correlated subqueries — once per outer row</h2></div>
+
+    <div class="card">
+      <p class="muted">A correlated subquery references a column from the outer query, so it re-runs for every outer row — like a mini-query inside a loop. Think "for each employee, compute the average salary of <em>their own</em> department, then compare."</p>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Each user's biggest order</h3>
+      <p class="muted">Same idea, two angles — summarise the peak per user, or pull the actual winning order rows:</p>
+      <div class="control-row">
+        <div class="seg" id="sq-corr-seg">
+          <button class="seg-btn active" data-mode="peruser">MAX amount per user</button>
+          <button class="seg-btn" data-mode="which">which order is the max</button>
+        </div>
+      </div>
+      <pre class="code" id="sq-corr-out"></pre>
+      <div id="sq-corr-res"></div>
+      <div id="sq-corr-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Row-by-row cases -->
+  <div class="subsection" id="sq-corr-cases">
+    <div class="sub-head"><div class="sub-tag">Cases · Playground</div><h2>Row-by-row comparisons</h2></div>
+
+    <div class="card">
+      <h3>🎮 The looping logic in action</h3>
+      <p class="muted">Three correlated patterns you'll reuse constantly — last-seen, running counts, and beating a group average:</p>
+      <div class="control-row">
+        <select id="sq-rbr-pick">
+          <option value="lastorder" selected>Most recent order per user (placed_at_utc)</option>
+          <option value="prevcount">Count of each user's previous orders</option>
+          <option value="deptavg">Employees above their department average</option>
+        </select>
+      </div>
+      <pre class="code" id="sq-rbr-out"></pre>
+      <div id="sq-rbr-res"></div>
+      <div id="sq-rbr-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🐢</div>
+      <div><strong>The hidden cost.</strong> A correlated subquery runs once per outer row — 1,000 rows means 1,000 inner runs. Modern optimizers often rewrite it as a <code>JOIN</code>, but for it to stay fast the inner <code>WHERE</code> column (e.g. <code>user_id</code>) must be <strong>indexed</strong>.</div>
+    </div>
+  </div>
+
+  <!-- Cheat sheet -->
+  <div class="subsection" id="sq-cheat">
+    <div class="sub-head"><div class="sub-tag">Reference · Cheat sheet</div><h2>Simple vs correlated</h2></div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>Simple subquery</th><th>Correlated subquery</th></tr></thead>
+        <tbody>
+          <tr><td>Execution</td><td>Runs once</td><td>Runs in a loop — once per outer row</td></tr>
+          <tr><td>Dependency</td><td>Independent; runs by itself</td><td>Depends on the outer row's values</td></tr>
+          <tr><td>Performance</td><td>Usually fast</td><td>Can be slow on large tables</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div class="subsection" id="sq-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Lock it in</h2></div>
+
+    <div class="card">
+      <h3>🎮 Pick the right tool</h3>
+      <p class="muted">Which clause fits each goal?</p>
+      <div id="sq-tool"></div>
+      <div id="sq-tool-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Predict the result</h3>
+      <p class="muted">Reason about what each subquery returns over the tables above.</p>
+      <div id="sq-predict"></div>
+      <div id="sq-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="subqueries">
+      <span>Mark Subqueries complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>
