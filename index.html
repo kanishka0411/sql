@@ -3717,6 +3717,542 @@ WHERE NOT EXISTS (
   </div>
 </section>
 
+<!-- ==================== MODULE 16: CTEs & TEMPORARY TABLES ==================== -->
+<section class="lesson" id="ctes" data-title="CTEs &amp; Temp Tables">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 16</div>
+    <h1>CTEs &amp; Temporary Tables</h1>
+    <p class="lede">A <strong>CTE</strong> (Common Table Expression) names the result of a query so the next query can select from it like a table. Defined with <code>WITH … AS (…)</code>, it lives only for that one statement — and it turns deeply nested subqueries into clean, sequential steps. The <strong>recursive</strong> flavour even walks tree-shaped data.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#cte-what">What is a CTE?</a>
+    <a href="#cte-setup">The tables</a>
+    <a href="#cte-basic">Basic CTE</a>
+    <a href="#cte-pipe">Multi-step pipeline</a>
+    <a href="#cte-vs">Subquery vs CTE</a>
+    <a href="#cte-rec">Recursive counter</a>
+    <a href="#cte-tree">Category tree</a>
+    <a href="#cte-temp">CTE vs temp table</a>
+    <a href="#cte-mistakes">Common mistakes</a>
+    <a href="#cte-game">Capstone game</a>
+  </nav>
+
+  <!-- What is a CTE -->
+  <div class="subsection" id="cte-what">
+    <div class="sub-head"><div class="sub-tag">Core · Concept</div><h2>Name a result set, then query it</h2></div>
+
+    <div class="card">
+      <h3>The high-level idea</h3>
+      <p class="muted">1) Run a query that generates a result set. 2) Give that result a name — like a nickname for a table. 3) Write a final query that selects from the named result as if it were real.</p>
+      <pre class="code">WITH cte_name AS (
+  -- any SELECT that returns a table-like result
+  SELECT ...
+)
+SELECT ...
+FROM cte_name;</pre>
+      <p class="muted">The keyword is <code>WITH</code> (not "width"). The CTE exists only for the duration of that one final query — nothing is stored on disk; the engine computes it, uses it, and throws it away.</p>
+    </div>
+
+    <div class="card">
+      <h3>Always tabular — even one value</h3>
+      <p class="muted">A CTE's output is always rows × columns. "One value" just means 1 row × 1 column; it can also be 0 rows or many.</p>
+      <pre class="code">WITH e_row AS (
+  SELECT 1 AS n
+)
+SELECT n FROM e_row;   -- → one row: n = 1</pre>
+    </div>
+
+    <div class="card">
+      <h3>Why bother?</h3>
+      <table class="comparison-tbl">
+        <thead><tr><th>Win</th><th>Because…</th></tr></thead>
+        <tbody>
+          <tr><td>Readability</td><td>Logic flows as named steps instead of deeply nested subqueries</td></tr>
+          <tr><td>Maintainability</td><td>Change one step (one CTE) without untangling the whole query</td></tr>
+          <tr><td>Reusability</td><td>Reference the same computed result multiple times in the final query</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Naming.</strong> Use descriptive CTE names (<code>sales_by_month</code>, not <code>demo</code>), don't collide with real table names, and optionally list explicit columns for clarity: <code>WITH user_summary (user_id, total_spent) AS (…)</code>.</div>
+    </div>
+  </div>
+
+  <!-- Setup -->
+  <div class="subsection" id="cte-setup">
+    <div class="sub-head"><div class="sub-tag">Setup · Reference</div><h2>The tables</h2></div>
+
+    <div class="card">
+      <p class="muted">Three teaching tables: restaurant <code>ratings</code> (note Burger Barn's <code>NULL</code> star — aggregates ignore it), a <code>sales_date</code> ledger, and a <code>categories</code> hierarchy where each row points at its parent. <strong>OrphanCat</strong>'s parent (999) doesn't exist — deliberately broken.</p>
+      <div class="dual-source">
+        <div><div class="src-label">ratings</div><div id="cte-rat-src"></div></div>
+        <div><div class="src-label">sales_date</div><div id="cte-sales-src"></div></div>
+      </div>
+      <div style="margin-top:14px;"><div class="src-label">categories</div><div id="cte-cat-src"></div></div>
+    </div>
+  </div>
+
+  <!-- Basic CTE -->
+  <div class="subsection" id="cte-basic">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>Basic CTE — compute once, filter after</h2></div>
+
+    <div class="card">
+      <h3>🎮 Average ratings, then a clean filter</h3>
+      <p class="muted">The CTE does the aggregation; the final query treats it like a table and filters. Pick a variant:</p>
+      <div class="control-row">
+        <select id="cte-basic-pick">
+          <option value="avg" selected>Restaurants with avg &gt; 4.0</option>
+          <option value="avgmin">…also show their MIN rating</option>
+          <option value="counts">All restaurants with avg + rating count</option>
+        </select>
+      </div>
+      <pre class="code" id="cte-basic-out"></pre>
+      <div id="cte-basic-res"></div>
+      <div id="cte-basic-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🐢</div>
+      <div><strong>Skip ORDER BY inside a CTE.</strong> The final query usually reorders or filters anyway, so sorting inside the CTE is wasted work. Sort in the final query — unless you specifically need ordering with <code>LIMIT</code> inside the step.</div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="subsection" id="cte-pipe">
+    <div class="sub-head"><div class="sub-tag">Pipeline · Playground</div><h2>Multi-step CTE pipeline</h2></div>
+
+    <div class="card">
+      <h3>🎮 Top salesperson, one step at a time</h3>
+      <p class="muted">Chain CTEs: each one uses the previous. Step through the pipeline and watch the intermediate results:</p>
+      <div class="control-row">
+        <div class="seg" id="cte-pipe-seg">
+          <button class="seg-btn active" data-stage="totals">1 · totals</button>
+          <button class="seg-btn" data-stage="max">2 · max_sales</button>
+          <button class="seg-btn" data-stage="final">3 · final JOIN</button>
+        </div>
+      </div>
+      <pre class="code" id="cte-pipe-out"></pre>
+      <div id="cte-pipe-res"></div>
+      <div id="cte-pipe-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Subquery vs CTE -->
+  <div class="subsection" id="cte-vs">
+    <div class="sub-head"><div class="sub-tag">Compare</div><h2>Subquery vs CTE — same answer, different shape</h2></div>
+
+    <div class="card">
+      <h3>Restaurants above the overall average</h3>
+      <div class="dual-source">
+        <div>
+          <div class="src-label">Subquery version</div>
+          <pre class="code">SELECT restaurant, AVG(stars) AS avg_stars
+FROM ratings
+GROUP BY restaurant
+HAVING AVG(stars) &gt; (
+  SELECT AVG(stars) FROM ratings
+)
+ORDER BY avg_stars DESC;</pre>
+        </div>
+        <div>
+          <div class="src-label">CTE version</div>
+          <pre class="code">WITH baseline AS (
+  SELECT AVG(stars) AS overall_avg
+  FROM ratings
+),
+avg_by_restaurant AS (
+  SELECT restaurant, AVG(stars) AS avg_stars
+  FROM ratings
+  GROUP BY restaurant
+)
+SELECT a.restaurant, a.avg_stars
+FROM avg_by_restaurant a
+CROSS JOIN baseline b
+WHERE a.avg_stars &gt; b.overall_avg
+ORDER BY a.avg_stars DESC;</pre>
+        </div>
+      </div>
+      <div class="src-label" style="margin-top:12px;">Both return</div>
+      <div id="cte-vs-res"></div>
+      <div class="merge-note" id="cte-vs-note"></div>
+    </div>
+  </div>
+
+  <!-- Recursive counter -->
+  <div class="subsection" id="cte-rec">
+    <div class="sub-head"><div class="sub-tag">Recursive · Playground</div><h2>Recursive CTE — anchor + loop</h2></div>
+
+    <div class="card">
+      <p class="muted">A recursive CTE has two parts glued by <code>UNION ALL</code>: the <strong>anchor query</strong> runs once and seeds the result; the <strong>recursive query</strong> references the CTE's own name and keeps adding rows until its condition fails. No stop condition → infinite loop.</p>
+    </div>
+
+    <div class="card">
+      <h3>🎮 The simplest recursion: count to N</h3>
+      <p class="muted">Change the stop condition and watch the rows grow:</p>
+      <div class="control-row">
+        <div class="seg" id="cte-rec-seg">
+          <button class="seg-btn" data-n="3">n &lt; 3</button>
+          <button class="seg-btn active" data-n="5">n &lt; 5</button>
+          <button class="seg-btn" data-n="8">n &lt; 8</button>
+        </div>
+      </div>
+      <pre class="code" id="cte-rec-out"></pre>
+      <div id="cte-rec-res"></div>
+      <div id="cte-rec-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- Category tree -->
+  <div class="subsection" id="cte-tree">
+    <div class="sub-head"><div class="sub-tag">Hierarchies · Playground</div><h2>Walking the category tree</h2></div>
+
+    <div class="card">
+      <h3>🎮 One pattern, five real questions</h3>
+      <p class="muted">The recursive member joins <code>categories</code> back to the CTE — downwards on <code>c.parent_id = ct.cat_id</code> (children), upwards on <code>c.cat_id = cp.parent_id</code> (parents):</p>
+      <div class="control-row">
+        <select id="cte-tree-pick">
+          <option value="down" selected>Full tree under Electronics (levels)</option>
+          <option value="up">Path from Android up to the root</option>
+          <option value="count">How many descendants under Mobiles?</option>
+          <option value="level3">Categories exactly 3 levels deep</option>
+          <option value="orphan">Find orphaned records</option>
+        </select>
+      </div>
+      <pre class="code" id="cte-tree-out"></pre>
+      <div id="cte-tree-res"></div>
+      <div id="cte-tree-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>Recursion safety.</strong> Always use <code>UNION ALL</code> (plain <code>UNION</code> dedupes every iteration — slow and error-prone), always have an anchor, index <code>parent_id</code>, and make sure the data has no cycles — A→B→A recurses forever.</div>
+    </div>
+  </div>
+
+  <!-- CTE vs temp table -->
+  <div class="subsection" id="cte-temp">
+    <div class="sub-head"><div class="sub-tag">Compare · Reference</div><h2>CTE vs Temporary Table</h2></div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Feature</th><th>CTE</th><th>Temporary table</th></tr></thead>
+        <tbody>
+          <tr><td>Definition</td><td>Logical named query block</td><td>Physical temp table</td></tr>
+          <tr><td>Storage</td><td>Logical / optimizer-dependent</td><td>Stored in temp storage</td></tr>
+          <tr><td>Lifetime</td><td>Single query only</td><td>Whole session / until dropped</td></tr>
+          <tr><td>Reusability</td><td>Within the same query only</td><td>Across multiple queries</td></tr>
+          <tr><td>Recursion</td><td>Yes</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Temporary table version of the ratings summary</h3>
+      <pre class="code">CREATE TEMPORARY TABLE tmp_avg_ratings AS
+SELECT restaurant,
+       AVG(stars)   AS avg_stars,
+       COUNT(stars) AS ratings_count
+FROM ratings
+GROUP BY restaurant;</pre>
+      <div id="cte-temp-res"></div>
+      <div class="merge-note">Sticks around for the whole session — you can hit it with many later queries. And note <code>COUNT(stars)</code> counts only non-NULL values: Burger Barn's count is 1.</div>
+    </div>
+  </div>
+
+  <!-- Common mistakes -->
+  <div class="subsection" id="cte-mistakes">
+    <div class="sub-head"><div class="sub-tag">Pitfalls</div><h2>Common mistakes to avoid</h2></div>
+
+    <div class="card">
+      <table class="comparison-tbl">
+        <thead><tr><th>Mistake</th><th>Why it bites</th><th>Do instead</th></tr></thead>
+        <tbody>
+          <tr><td>Semicolon after the CTE</td><td><code>WITH … ;</code> ends the statement — the final query loses its CTE</td><td>One statement, one semicolon at the very end</td></tr>
+          <tr><td><code>SELECT</code> before <code>WITH</code></td><td>The <code>WITH</code> clause must open the query</td><td>Define all CTEs first, final query last</td></tr>
+          <tr><td>Comma after the last CTE</td><td>Syntax error — commas go <em>between</em> CTEs only</td><td><code>WITH a AS (…), b AS (…) SELECT …</code></td></tr>
+          <tr><td>Reusing a CTE in the next statement</td><td>Scope is one query — it's gone after that</td><td>Redefine it, or use a temporary table</td></tr>
+          <tr><td>Treating a CTE as a variable</td><td>It's always a table shape, even 1 row × 1 column</td><td>Select from it; join or CROSS JOIN a one-row CTE</td></tr>
+          <tr><td>50-line mega-CTE</td><td>Defeats the whole readability purpose</td><td>One logical step per CTE</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div class="subsection" id="cte-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Lock it in</h2></div>
+
+    <div class="card">
+      <h3>🎮 Pick the right tool</h3>
+      <p class="muted">CTE, recursive CTE, or temp table?</p>
+      <div id="cte-tool"></div>
+      <div id="cte-tool-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Predict the result</h3>
+      <p class="muted">Reason over the tables above.</p>
+      <div id="cte-predict"></div>
+      <div id="cte-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="ctes">
+      <span>Mark CTEs &amp; Temporary Tables complete</span>
+    </label>
+  </div>
+</section>
+
+<!-- ==================== MODULE 17: DATES & TIMES ==================== -->
+<section class="lesson" id="dates" data-title="Dates &amp; Times">
+  <header class="lesson-head">
+    <div class="lesson-tag">Module 17</div>
+    <h1>Dates &amp; Times</h1>
+    <p class="lede">Dates power every real report: <em>who joined when, what sold this month, how fast did we deliver?</em> You'll extract parts with <code>YEAR()</code> / <code>MONTH()</code> / <code>EXTRACT()</code>, filter ranges the <strong>index-friendly</strong> way, find first/latest events with <code>MIN</code>/<code>MAX</code>, and measure gaps with <code>DATEDIFF</code> and <code>TIMESTAMPDIFF</code> — plus the classic <code>BETWEEN</code>-on-<code>DATETIME</code> interview trap, live.</p>
+  </header>
+
+  <nav class="subnav">
+    <a href="#dt-extract">Extracting parts</a>
+    <a href="#dt-emp">Employee scenarios</a>
+    <a href="#dt-sarg">The performance rule</a>
+    <a href="#dt-range">Date ranges</a>
+    <a href="#dt-trap">The BETWEEN trap</a>
+    <a href="#dt-minmax">First &amp; latest</a>
+    <a href="#dt-diff">Date differences</a>
+    <a href="#dt-latency">Delivery latency</a>
+    <a href="#dt-game">Capstone game</a>
+  </nav>
+
+  <!-- Extraction -->
+  <div class="subsection" id="dt-extract">
+    <div class="sub-head"><div class="sub-tag">Core · Playground</div><h2>Extracting date &amp; time parts</h2></div>
+
+    <div class="card">
+      <h3>🎮 Six functions, two spellings</h3>
+      <p class="muted">Given <code>@date_temp = '2029-08-19'</code> and <code>@datetime_temp = '2029-05-18 12:50:45'</code>, pull out any component. <code>EXTRACT(part FROM value)</code> is the SQL-standard spelling of the same thing:</p>
+      <div class="control-row">
+        <div class="seg" id="dt-ex-seg">
+          <button class="seg-btn active" data-mode="date">Date parts</button>
+          <button class="seg-btn" data-mode="time">Time parts</button>
+          <button class="seg-btn" data-mode="extract">EXTRACT()</button>
+        </div>
+      </div>
+      <pre class="code" id="dt-ex-out"></pre>
+      <div id="dt-ex-res"></div>
+      <div id="dt-ex-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">💡</div>
+      <div><strong>Gotchas.</strong> <code>MONTH()</code> starts at <strong>1</strong> for January (not 0). <code>HOUR()</code> on a date-only value gives 0 — there's no time to read. And <code>EXTRACT</code> needs its <code>FROM</code>: <code>EXTRACT(YEAR joining_date)</code> is a syntax error.</div>
+    </div>
+  </div>
+
+  <!-- Employee scenarios -->
+  <div class="subsection" id="dt-emp">
+    <div class="sub-head"><div class="sub-tag">Cases · Playground</div><h2>Joining dates in practice</h2></div>
+
+    <div class="card">
+      <p class="muted">The <code>employees</code> table — note Arjun's <code>NULL</code> joining date:</p>
+      <div id="dt-emp-src"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Break the date apart, then report on it</h3>
+      <div class="control-row">
+        <select id="dt-emp-pick">
+          <option value="parts" selected>Join year + month per employee</option>
+          <option value="hires">Hiring count by year &amp; month (GROUP BY)</option>
+        </select>
+      </div>
+      <pre class="code" id="dt-emp-out"></pre>
+      <div id="dt-emp-res"></div>
+      <div id="dt-emp-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- SARGability -->
+  <div class="subsection" id="dt-sarg">
+    <div class="sub-head"><div class="sub-tag">Performance · Rule</div><h2>The BIG performance rule</h2></div>
+
+    <div class="card">
+      <h3>Never wrap the column in a function to filter it</h3>
+      <div class="dual-source">
+        <div>
+          <div class="src-label">❌ Slow — full table scan risk</div>
+          <pre class="code">WHERE YEAR(joining_date) = 2029
+  AND MONTH(joining_date) = 2;</pre>
+        </div>
+        <div>
+          <div class="src-label">✅ Fast — index range scan</div>
+          <pre class="code">WHERE joining_date >= '2029-02-01'
+  AND joining_date <  '2029-03-01';</pre>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:12px;">This is called being <strong>SARGable</strong> (Search-ARGument-able). Wrapping the column in <code>YEAR()</code> forces the engine to compute the year for <em>every row</em> before checking; a plain range lets it jump straight to the right slice of the index. Same results, wildly different speed on 10&nbsp;million rows.</p>
+    </div>
+  </div>
+
+  <!-- Ranges -->
+  <div class="subsection" id="dt-range">
+    <div class="sub-head"><div class="sub-tag">Ranges · Playground</div><h2>Filtering with date ranges</h2></div>
+
+    <div class="card">
+      <p class="muted">The <code>orders</code> table (a <code>DATE</code> column — no time part):</p>
+      <div id="dt-ord-src"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Pick a window</h3>
+      <p class="muted"><code>BETWEEN</code> is inclusive on both ends — fine on pure <code>DATE</code> columns. The half-open pattern (<code>&gt;= start AND &lt; next-period-start</code>) works everywhere and needs no month-length math:</p>
+      <div class="control-row">
+        <select id="dt-range-pick">
+          <option value="jan" selected>January 2029 (BETWEEN)</option>
+          <option value="q1">Q1 2029 (half-open interval)</option>
+        </select>
+      </div>
+      <pre class="code" id="dt-range-out"></pre>
+      <div id="dt-range-res"></div>
+      <div id="dt-range-note" class="merge-note"></div>
+    </div>
+  </div>
+
+  <!-- BETWEEN trap -->
+  <div class="subsection" id="dt-trap">
+    <div class="sub-head"><div class="sub-tag">Pitfall · Playground</div><h2>The BETWEEN + DATETIME trap</h2></div>
+
+    <div class="card">
+      <h3>⚠️ 🎮 Where did January 31st go?</h3>
+      <p class="muted">On a <code>DATETIME</code> column, <code>'2029-01-31'</code> silently becomes <code>'2029-01-31 00:00:00'</code> — so <code>BETWEEN</code> keeps only the first <em>second</em> of the 31st. Try all three filters on the January logins and watch who survives:</p>
+      <div class="control-row">
+        <div class="seg" id="dt-trap-seg">
+          <button class="seg-btn active" data-mode="between">BETWEEN date-only</button>
+          <button class="seg-btn" data-mode="endofday">&lt;= 23:59:59</button>
+          <button class="seg-btn" data-mode="halfopen">half-open ✅</button>
+        </div>
+      </div>
+      <pre class="code" id="dt-trap-out"></pre>
+      <div id="dt-trap-res"></div>
+      <div id="dt-trap-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🎯</div>
+      <div><strong>The production-safe pattern:</strong> <code>login_time &gt;= '2029-01-01' AND login_time &lt; '2029-02-01'</code> — a <strong>half-open interval</strong> <code>[start, next_start)</code>. It catches every timestamp including fractional seconds (<code>23:59:59.500</code> slips past a <code>&lt;= 23:59:59</code> filter), never needs 28-vs-31-day math, and stays index-friendly.</div>
+    </div>
+  </div>
+
+  <!-- MIN / MAX -->
+  <div class="subsection" id="dt-minmax">
+    <div class="sub-head"><div class="sub-tag">Events · Playground</div><h2>First &amp; latest events with MIN / MAX</h2></div>
+
+    <div class="card">
+      <p class="muted">SQL sees dates as numbers on a timeline: <code>MIN</code> = oldest, <code>MAX</code> = newest. The <code>logins</code> table:</p>
+      <div id="dt-log-src"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Five timeline questions</h3>
+      <div class="control-row">
+        <select id="dt-mm-pick">
+          <option value="global" selected>Global first &amp; last login</option>
+          <option value="peruser">Per-user first + latest (GROUP BY)</option>
+          <option value="engage">Engagement: latest + login count</option>
+          <option value="android">Latest android login (WHERE + MAX)</option>
+          <option value="firstfeb">First login of February (MIN + range)</option>
+        </select>
+      </div>
+      <pre class="code" id="dt-mm-out"></pre>
+      <div id="dt-mm-res"></div>
+      <div id="dt-mm-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">⚠️</div>
+      <div><strong>MIN/MAX mistakes.</strong> Selecting <code>device</code> next to <code>MIN(login_time)</code> without grouping by it can return a device that doesn't match that minimum row. Dates stored outside <code>'YYYY-MM-DD'</code> sort alphabetically, not chronologically. And both functions <em>ignore NULLs</em> — a user whose every login_time is NULL gets NULL, not an error.</div>
+    </div>
+  </div>
+
+  <!-- Differences -->
+  <div class="subsection" id="dt-diff">
+    <div class="sub-head"><div class="sub-tag">Arithmetic · Playground</div><h2>DATEDIFF &amp; TIMESTAMPDIFF</h2></div>
+
+    <div class="card">
+      <h3>🎮 Two rulers</h3>
+      <p class="muted"><code>DATEDIFF(end, start)</code> always answers in whole <strong>days</strong>, ignoring time. <code>TIMESTAMPDIFF(unit, start, end)</code> counts <em>complete</em> units of your choice — note the argument order flips!</p>
+      <div class="control-row">
+        <select id="dt-diff-pick">
+          <option value="days" selected>DATEDIFF — days between two dates</option>
+          <option value="hours">TIMESTAMPDIFF — hours between timestamps</option>
+          <option value="resolve">Ticket resolution time in days</option>
+          <option value="overdue">Overdue backlog (OPEN &amp; before today)</option>
+          <option value="week">Signed-up-style moving window (last 7 days)</option>
+          <option value="today">Who logged in today? (CURRENT_DATE)</option>
+        </select>
+      </div>
+      <pre class="code" id="dt-diff-out"></pre>
+      <div id="dt-diff-res"></div>
+      <div id="dt-diff-note" class="merge-note"></div>
+    </div>
+
+    <div class="card tip-card">
+      <div class="tip-icon">🕐</div>
+      <div><strong>CURRENT_DATE makes reports <em>live</em>.</strong> Hardcode a date and the report is right for one day; use <code>CURRENT_DATE</code> / <code>CURRENT_TIMESTAMP</code> and the same query stays correct forever — that's what powers daily dashboards and alerts. Watch out for: server <strong>timezone</strong> ("today" in the US ≠ "today" in India — prefer UTC), portability (<code>GETDATE()</code> in SQL Server), and comparing <code>CURRENT_DATE</code> to a DATETIME column — SQL pads it to midnight, so later-in-the-day rows can slip out.</div>
+    </div>
+  </div>
+
+  <!-- Delivery latency -->
+  <div class="subsection" id="dt-latency">
+    <div class="sub-head"><div class="sub-tag">Capstone · Case study</div><h2>Instant food delivery latency</h2></div>
+
+    <div class="card">
+      <h3>Minutes to deliver + a CASE verdict</h3>
+      <pre class="code">SELECT order_id, order_placed_at, delivered_at,
+  TIMESTAMPDIFF(MINUTE, order_placed_at, delivered_at) AS delivery_minutes,
+  CASE
+    WHEN delivered_at IS NULL THEN 'Pending'
+    WHEN delivered_at < order_placed_at THEN 'Bad Data'
+    WHEN TIMESTAMPDIFF(SECOND, order_placed_at, delivered_at) <= 60 * 30 THEN 'On Time'
+    ELSE 'Slow'
+  END AS delivery_status
+FROM deliveries;</pre>
+      <div id="dt-del-res"></div>
+      <div class="merge-note">The <code>CASE</code> guards fire top-down: NULL first (still pending), then reversed timestamps (bad data — order 9004 was "delivered" before it was placed), then the 30-minute promise. Orders 9007 and 9008 cross <em>midnight</em> and still compute correctly — timestamps don't care about day boundaries.</div>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div class="subsection" id="dt-game">
+    <div class="sub-head"><div class="sub-tag">Capstone · Game</div><h2>Lock it in</h2></div>
+
+    <div class="card">
+      <h3>🎮 Pick the right tool</h3>
+      <p class="muted">Function, pattern, or trap?</p>
+      <div id="dt-tool"></div>
+      <div id="dt-tool-score" class="uc-score"></div>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Predict the result</h3>
+      <p class="muted">Reason over the tables above.</p>
+      <div id="dt-predict"></div>
+      <div id="dt-predict-score" class="uc-score"></div>
+    </div>
+  </div>
+
+  <div class="lesson-foot">
+    <label class="complete-check">
+      <input type="checkbox" class="lesson-done" data-lesson="dates">
+      <span>Mark Dates &amp; Times complete</span>
+    </label>
+  </div>
+</section>
+
 </main>
 
 <script src="app.js"></script>

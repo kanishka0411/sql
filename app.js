@@ -3584,3 +3584,580 @@ buildClassify('sq-predict', 'sq-predict-score', [
   { label: 'Predict', prompt: 'product_id NOT IN (a list that contains a NULL) — rows?', options: [opt('Zero — NULL poisons the list', true), opt('All products'), opt('Just Keyboard')], why: 'A NULL in the list makes every NOT IN test unknown → no rows.' },
   { label: 'Predict', prompt: 'Counting an order\'s previous orders — order 102\'s value?', options: [opt('1', true), opt('0'), opt('2')], why: 'Order 101 (same user, earlier timestamp) precedes it → 1.' }
 ]);
+
+// ============ MODULE 16: CTEs & TEMPORARY TABLES ============
+const cteRatings = [
+  { rating_id: 1,  restaurant: 'Cafe Aroma',  stars: 4 },
+  { rating_id: 2,  restaurant: 'Cafe Aroma',  stars: 5 },
+  { rating_id: 3,  restaurant: 'Pasta Hub',   stars: 3 },
+  { rating_id: 4,  restaurant: 'Pasta Hub',   stars: 4 },
+  { rating_id: 5,  restaurant: 'Spice Box',   stars: 5 },
+  { rating_id: 6,  restaurant: 'Burger Barn', stars: 4 },
+  { rating_id: 7,  restaurant: 'Burger Barn', stars: null },
+  { rating_id: 8,  restaurant: 'Sushi Zen',   stars: 4 },
+  { rating_id: 9,  restaurant: 'Sushi Zen',   stars: 4 },
+  { rating_id: 10, restaurant: 'Taco Town',   stars: 2 },
+  { rating_id: 11, restaurant: 'Taco Town',   stars: 3 },
+  { rating_id: 12, restaurant: 'Noodle Nest', stars: 4 }
+];
+const cteSales = [
+  { sale_id: 101, salesperson: 'Aditi', amount: 500 },
+  { sale_id: 102, salesperson: 'Rahul', amount: 300 },
+  { sale_id: 103, salesperson: 'Aditi', amount: 700 },
+  { sale_id: 104, salesperson: 'Karan', amount: 250 },
+  { sale_id: 105, salesperson: 'Neha',  amount: 900 },
+  { sale_id: 106, salesperson: 'Rahul', amount: 150 },
+  { sale_id: 107, salesperson: 'Karan', amount: 100 },
+  { sale_id: 108, salesperson: 'Ishan', amount: 600 },
+  { sale_id: 109, salesperson: 'Ishan', amount: 100 },
+  { sale_id: 110, salesperson: 'Neha',  amount: 200 },
+  { sale_id: 111, salesperson: 'Rahul', amount: 50 },
+  { sale_id: 112, salesperson: 'Karan', amount: 20 }
+];
+const cteCats = [
+  { cat_id: 1,  name: 'Electronics', parent_id: null },
+  { cat_id: 2,  name: 'Mobiles',     parent_id: 1 },
+  { cat_id: 3,  name: 'Accessories', parent_id: 2 },
+  { cat_id: 4,  name: 'Cables',      parent_id: 3 },
+  { cat_id: 5,  name: 'Chargers',    parent_id: 3 },
+  { cat_id: 6,  name: 'Home',        parent_id: null },
+  { cat_id: 7,  name: 'Kitchen',     parent_id: 6 },
+  { cat_id: 8,  name: 'Appliances',  parent_id: 6 },
+  { cat_id: 9,  name: 'Smartphones', parent_id: 2 },
+  { cat_id: 10, name: 'Android',     parent_id: 9 },
+  { cat_id: 11, name: 'iOS',         parent_id: 9 },
+  { cat_id: 12, name: 'OrphanCat',   parent_id: 999 }
+];
+// per-restaurant AVG/MIN/COUNT over non-NULL stars (SQL aggregate semantics)
+function cteAvgRatings() {
+  const names = [...new Set(cteRatings.map(r => r.restaurant))];
+  return names.map(n => {
+    const s = cteRatings.filter(r => r.restaurant === n && r.stars !== null).map(r => r.stars);
+    return {
+      restaurant: n,
+      avg_stars: s.length ? s.reduce((a, b) => a + b, 0) / s.length : null,
+      min_rating: s.length ? Math.min(...s) : null,
+      ratings_count: s.length
+    };
+  });
+}
+const cteFmtAvg = v => v === null ? null : (Math.round(v * 10000) / 10000).toFixed(v % 1 === 0 ? 1 : 4).replace(/0+$/, '').replace(/\.$/, '.0');
+
+// source tables
+const cteRatSrc = document.getElementById('cte-rat-src');
+if (cteRatSrc) {
+  cteRatSrc.innerHTML = uTable(cteRatings, ['rating_id', 'restaurant', 'stars']);
+  document.getElementById('cte-sales-src').innerHTML = uTable(
+    cteSales.map(s => ({ ...s, amount: s.amount.toFixed(2) })), ['sale_id', 'salesperson', 'amount']);
+  document.getElementById('cte-cat-src').innerHTML = uTable(cteCats, ['cat_id', 'name', 'parent_id']);
+}
+
+// --- basic CTE playground ---
+const cteBasicPick = document.getElementById('cte-basic-pick');
+if (cteBasicPick) {
+  const out = document.getElementById('cte-basic-out');
+  const res = document.getElementById('cte-basic-res');
+  const note = document.getElementById('cte-basic-note');
+  function runBasic() {
+    const mode = cteBasicPick.value;
+    const all = cteAvgRatings();
+    if (mode === 'avg') {
+      out.textContent = `WITH avg_ratings AS (\n  SELECT restaurant, AVG(stars) AS avg_stars\n  FROM ratings\n  GROUP BY restaurant\n)\nSELECT restaurant, avg_stars\nFROM avg_ratings\nWHERE avg_stars > 4.0\nORDER BY restaurant ASC;`;
+      const rows = all.filter(r => r.avg_stars > 4)
+        .sort((a, b) => a.restaurant.localeCompare(b.restaurant))
+        .map(r => ({ restaurant: r.restaurant, avg_stars: cteFmtAvg(r.avg_stars) }));
+      res.innerHTML = uTable(rows, ['restaurant', 'avg_stars']);
+      note.innerHTML = 'The CTE computes one row per restaurant; the outer query filters. AVG() ignores NULL — Burger Barn averages 4.0 on its single valid rating, so it just misses the &gt; 4.0 bar.';
+    } else if (mode === 'avgmin') {
+      out.textContent = `WITH avg_ratings AS (\n  SELECT restaurant,\n         AVG(stars) AS avg_stars,\n         MIN(stars) AS min_rating\n  FROM ratings\n  GROUP BY restaurant\n)\nSELECT restaurant, avg_stars, min_rating\nFROM avg_ratings\nWHERE avg_stars > 4.0\nORDER BY restaurant ASC;`;
+      const rows = all.filter(r => r.avg_stars > 4)
+        .sort((a, b) => a.restaurant.localeCompare(b.restaurant))
+        .map(r => ({ restaurant: r.restaurant, avg_stars: cteFmtAvg(r.avg_stars), min_rating: r.min_rating }));
+      res.innerHTML = uTable(rows, ['restaurant', 'avg_stars', 'min_rating']);
+      note.innerHTML = 'One CTE can carry several aggregates at once — add MIN(stars) in the step, pick it up in the final query.';
+    } else {
+      out.textContent = `WITH avg_ratings AS (\n  SELECT restaurant,\n         AVG(stars)   AS avg_stars,\n         COUNT(stars) AS ratings_count\n  FROM ratings\n  GROUP BY restaurant\n)\nSELECT *\nFROM avg_ratings\nORDER BY restaurant ASC;`;
+      const rows = [...all].sort((a, b) => a.restaurant.localeCompare(b.restaurant))
+        .map(r => ({ restaurant: r.restaurant, avg_stars: cteFmtAvg(r.avg_stars), ratings_count: r.ratings_count }));
+      res.innerHTML = uTable(rows, ['restaurant', 'avg_stars', 'ratings_count']);
+      note.innerHTML = '<code>COUNT(stars)</code> counts only non-NULL values — that\'s why Burger Barn shows 1, not 2.';
+    }
+  }
+  cteBasicPick.addEventListener('change', runBasic);
+  runBasic();
+}
+
+// --- multi-step pipeline ---
+const ctePipeOut = document.getElementById('cte-pipe-out');
+if (ctePipeOut) {
+  const res = document.getElementById('cte-pipe-res');
+  const note = document.getElementById('cte-pipe-note');
+  const totals = [...new Set(cteSales.map(s => s.salesperson))].map(p => ({
+    salesperson: p,
+    total_sales: cteSales.filter(s => s.salesperson === p).reduce((a, s) => a + s.amount, 0)
+  }));
+  const maxTotal = Math.max(...totals.map(t => t.total_sales));
+  function runPipe(stage) {
+    if (stage === 'totals') {
+      ctePipeOut.textContent = `WITH totals AS (\n  SELECT salesperson, SUM(amount) AS total_sales\n  FROM sales_date\n  GROUP BY salesperson\n)\nSELECT * FROM totals;   -- peeking at step 1`;
+      res.innerHTML = uTable(
+        [...totals].sort((a, b) => a.salesperson.localeCompare(b.salesperson))
+          .map(t => ({ salesperson: t.salesperson, total_sales: t.total_sales.toFixed(2) })),
+        ['salesperson', 'total_sales']);
+      note.innerHTML = 'Step 1: one row per salesperson with their SUM — the raw material for the next step.';
+    } else if (stage === 'max') {
+      ctePipeOut.textContent = `WITH totals AS ( … ),\nmax_sales AS (\n  SELECT MAX(total_sales) AS max_total_sales\n  FROM totals            -- ← uses the previous CTE\n)\nSELECT * FROM max_sales;  -- peeking at step 2`;
+      res.innerHTML = uTable([{ max_total_sales: maxTotal.toFixed(2) }], ['max_total_sales']);
+      note.innerHTML = 'Step 2 selects <em>from the first CTE</em>, not from the base table — that\'s the pipeline: each step builds on the last.';
+    } else {
+      ctePipeOut.textContent = `WITH totals AS (\n  SELECT salesperson, SUM(amount) AS total_sales\n  FROM sales_date\n  GROUP BY salesperson\n),\nmax_sales AS (\n  SELECT MAX(total_sales) AS max_total_sales\n  FROM totals\n)\nSELECT t.salesperson, t.total_sales\nFROM totals t\nJOIN max_sales m\n  ON t.total_sales = m.max_total_sales;`;
+      res.innerHTML = uTable(
+        totals.filter(t => t.total_sales === maxTotal)
+          .map(t => ({ salesperson: t.salesperson, total_sales: t.total_sales.toFixed(2) })),
+        ['salesperson', 'total_sales']);
+      note.innerHTML = 'The join keeps only rows whose total equals the max — Aditi at 1200.00. If two people tied, both would appear.';
+    }
+  }
+  sqSeg('cte-pipe-seg', 'stage', runPipe);
+  runPipe('totals');
+}
+
+// --- subquery vs CTE shared result ---
+const cteVsRes = document.getElementById('cte-vs-res');
+if (cteVsRes) {
+  const all = cteAvgRatings();
+  const valid = cteRatings.filter(r => r.stars !== null).map(r => r.stars);
+  const overall = valid.reduce((a, b) => a + b, 0) / valid.length;
+  const rows = all.filter(r => r.avg_stars > overall)
+    .sort((a, b) => b.avg_stars - a.avg_stars || a.restaurant.localeCompare(b.restaurant))
+    .map(r => ({ restaurant: r.restaurant, avg_stars: cteFmtAvg(r.avg_stars) }));
+  cteVsRes.innerHTML = uTable(rows, ['restaurant', 'avg_stars']);
+  document.getElementById('cte-vs-note').innerHTML =
+    `Overall average is <code>${overall.toFixed(4)}…</code> (AVG ignores the NULL), so every restaurant above that survives. Why <code>CROSS JOIN</code>? <code>baseline</code> is exactly one row, so crossing it just hands that one value to every restaurant row for comparison.`;
+}
+
+// --- recursive counter ---
+const cteRecOut = document.getElementById('cte-rec-out');
+if (cteRecOut) {
+  const res = document.getElementById('cte-rec-res');
+  const note = document.getElementById('cte-rec-note');
+  function runRec(nStr) {
+    const N = Number(nStr);
+    cteRecOut.textContent = `WITH RECURSIVE demo AS (\n  SELECT 1 AS n        -- anchor: runs once\n  UNION ALL\n  SELECT n + 1         -- recursive: references demo\n  FROM demo\n  WHERE n < ${N}          -- stop condition\n)\nSELECT * FROM demo;`;
+    const rows = [];
+    for (let n = 1; n <= N; n++) rows.push({ n });
+    res.innerHTML = uTable(rows, ['n']);
+    note.innerHTML = `Anchor seeds n = 1; each pass adds n + 1 while n &lt; ${N}. When n reaches ${N}, the condition fails and recursion stops — ${N} rows total. Without that WHERE, it would loop forever.`;
+  }
+  sqSeg('cte-rec-seg', 'n', runRec);
+  runRec('5');
+}
+
+// --- category tree playground ---
+const cteTreePick = document.getElementById('cte-tree-pick');
+if (cteTreePick) {
+  const out = document.getElementById('cte-tree-out');
+  const res = document.getElementById('cte-tree-res');
+  const note = document.getElementById('cte-tree-note');
+  // BFS downward from a root id, tagging levels (mirrors the recursive CTE)
+  function walkDown(rootId) {
+    const found = [];
+    let frontier = cteCats.filter(c => c.cat_id === rootId).map(c => ({ ...c, level: 1 }));
+    while (frontier.length) {
+      found.push(...frontier);
+      const ids = frontier.map(f => f.cat_id);
+      frontier = cteCats.filter(c => ids.includes(c.parent_id))
+        .map(c => ({ ...c, level: found.find(f => f.cat_id === c.parent_id).level + 1 }));
+    }
+    return found;
+  }
+  function walkUp(startId) {
+    const found = [];
+    let cur = cteCats.find(c => c.cat_id === startId), level = 1;
+    while (cur) {
+      found.push({ ...cur, level });
+      cur = cteCats.find(c => c.cat_id === cur.parent_id);
+      level++;
+    }
+    return found;
+  }
+  function runTree() {
+    const m = cteTreePick.value;
+    if (m === 'down') {
+      out.textContent = `WITH RECURSIVE category_tree AS (\n  -- Anchor: start at Electronics\n  SELECT cat_id, name, parent_id, 1 AS level\n  FROM categories\n  WHERE cat_id = 1\n  UNION ALL\n  -- Recursive: children of the previous level\n  SELECT c.cat_id, c.name, c.parent_id, ct.level + 1\n  FROM categories c\n  JOIN category_tree ct\n    ON c.parent_id = ct.cat_id\n)\nSELECT * FROM category_tree\nORDER BY level ASC, cat_id ASC;`;
+      const rows = walkDown(1).sort((a, b) => a.level - b.level || a.cat_id - b.cat_id);
+      res.innerHTML = uTable(rows, ['cat_id', 'name', 'parent_id', 'level']);
+      note.innerHTML = 'Level 1 = Electronics → level 2 finds Mobiles → level 3 its children → level 4 the leaves. Home\'s branch and OrphanCat never connect to Electronics, so they don\'t appear.';
+    } else if (m === 'up') {
+      out.textContent = `WITH RECURSIVE category_path AS (\n  -- Anchor: start at Android\n  SELECT cat_id, name, parent_id, 1 AS level\n  FROM categories\n  WHERE cat_id = 10\n  UNION ALL\n  -- Recursive: parent of the previous level\n  SELECT c.cat_id, c.name, c.parent_id, cp.level + 1\n  FROM categories c\n  JOIN category_path cp\n    ON c.cat_id = cp.parent_id   -- join reversed!\n)\nSELECT * FROM category_path\nORDER BY level DESC;`;
+      const rows = walkUp(10).sort((a, b) => b.level - a.level);
+      res.innerHTML = uTable(rows, ['cat_id', 'name', 'parent_id', 'level']);
+      note.innerHTML = 'Same machine, join flipped: <code>c.cat_id = cp.parent_id</code> climbs Android → Smartphones → Mobiles → Electronics, stopping at the NULL parent.';
+    } else if (m === 'count') {
+      out.textContent = `WITH RECURSIVE descendants AS (\n  SELECT cat_id FROM categories WHERE cat_id = 2\n  UNION ALL\n  SELECT c.cat_id\n  FROM categories c\n  JOIN descendants d ON c.parent_id = d.cat_id\n)\nSELECT COUNT(*) - 1 AS total_subcategories\nFROM descendants;   -- minus Mobiles itself`;
+      res.innerHTML = uTable([{ total_subcategories: walkDown(2).length - 1 }], ['total_subcategories']);
+      note.innerHTML = 'Collect Mobiles plus everything beneath it, then subtract 1 to exclude Mobiles itself: Accessories, Smartphones, Cables, Chargers, Android, iOS → 6.';
+    } else if (m === 'level3') {
+      out.textContent = `WITH RECURSIVE category_levels AS (\n  SELECT cat_id, name, parent_id, 1 AS level\n  FROM categories WHERE cat_id = 1\n  UNION ALL\n  SELECT c.cat_id, c.name, c.parent_id, cl.level + 1\n  FROM categories c\n  JOIN category_levels cl ON c.parent_id = cl.cat_id\n)\nSELECT cat_id, name, level\nFROM category_levels\nWHERE level = 3;`;
+      const rows = walkDown(1).filter(r => r.level === 3).map(r => ({ cat_id: r.cat_id, name: r.name, level: r.level }));
+      res.innerHTML = uTable(rows, ['cat_id', 'name', 'level']);
+      note.innerHTML = 'The CTE builds the whole tree with levels; the final WHERE keeps just one slice of it.';
+    } else {
+      out.textContent = `SELECT cat_id, name, parent_id\nFROM categories\nWHERE parent_id IS NOT NULL\n  AND parent_id NOT IN (\n    SELECT cat_id FROM categories\n  );`;
+      const ids = cteCats.map(c => c.cat_id);
+      const rows = cteCats.filter(c => c.parent_id !== null && !ids.includes(c.parent_id));
+      res.innerHTML = uTable(rows, ['cat_id', 'name', 'parent_id']);
+      note.innerHTML = 'OrphanCat points at parent 999, which doesn\'t exist — a disconnected branch no tree walk will ever reach. Worth hunting for before you trust any hierarchy.';
+    }
+  }
+  cteTreePick.addEventListener('change', runTree);
+  runTree();
+}
+
+// --- temp table result ---
+const cteTempRes = document.getElementById('cte-temp-res');
+if (cteTempRes) {
+  const rows = cteAvgRatings()
+    .sort((a, b) => a.restaurant.localeCompare(b.restaurant))
+    .map(r => ({ restaurant: r.restaurant, avg_stars: cteFmtAvg(r.avg_stars), ratings_count: r.ratings_count }));
+  cteTempRes.innerHTML = uTable(rows, ['restaurant', 'avg_stars', 'ratings_count']);
+}
+
+// --- games ---
+buildClassify('cte-tool', 'cte-tool-score', [
+  { label: 'Goal', prompt: 'Break a 3-step aggregation into readable named steps inside one query', options: [opt('CTE', true), opt('Temporary table'), opt('Correlated subquery')], why: 'Named sequential steps within a single statement → chained CTEs.' },
+  { label: 'Goal', prompt: 'Reuse a computed summary across five separate queries in a session', options: [opt('Temporary table', true), opt('CTE'), opt('Recursive CTE')], why: 'A CTE dies with its query; a temp table lives for the whole session.' },
+  { label: 'Goal', prompt: 'List every subcategory under "Electronics", any depth', options: [opt('Recursive CTE', true), opt('Plain CTE'), opt('Self-JOIN once')], why: 'Unknown depth needs recursion; one self-join only reaches one level.' },
+  { label: 'Pick', prompt: 'The keyword that starts a CTE definition', code: true, options: [opt('WITH', true), opt('AS'), opt('WIDTH')], why: 'WITH cte_name AS (…) — and it\'s WITH, not "width".' },
+  { label: 'Pick', prompt: 'The glue between anchor and recursive member', code: true, options: [opt('UNION ALL', true), opt('UNION'), opt('CROSS JOIN')], why: 'UNION ALL — plain UNION dedupes each iteration, which is slow and can break results.' },
+  { label: 'Pick', prompt: 'Where should ORDER BY usually go?', options: [opt('The final query', true), opt('Inside each CTE'), opt('Both, to be safe')], why: 'Sorting inside a CTE is usually wasted work — the final query decides the order.' }
+]);
+
+buildClassify('cte-predict', 'cte-predict-score', [
+  { label: 'Predict', prompt: 'avg_ratings WHERE avg_stars > 4.0 — which restaurants?', options: [opt('Cafe Aroma & Spice Box', true), opt('Spice Box only'), opt('Cafe Aroma, Spice Box & Burger Barn')], why: 'Cafe Aroma 4.5 and Spice Box 5.0. Burger Barn is exactly 4.0 — not greater.' },
+  { label: 'Predict', prompt: 'Burger Barn has ratings 4 and NULL — its AVG(stars)?', options: [opt('4.0', true), opt('2.0'), opt('NULL')], why: 'AVG ignores NULL: 4 ÷ 1 = 4.0, not 4 ÷ 2.' },
+  { label: 'Predict', prompt: 'WITH RECURSIVE … WHERE n < 5 counting from 1 — rows returned?', options: [opt('5', true), opt('4'), opt('Infinite')], why: 'n = 1..5: the row with n = 5 is produced, then the condition stops further recursion.' },
+  { label: 'Predict', prompt: 'Category tree from Electronics — does OrphanCat appear?', options: [opt('No — its parent 999 doesn\'t exist', true), opt('Yes, at level 2'), opt('Yes, at the deepest level')], why: 'The walk only follows real parent→child links; OrphanCat is disconnected.' },
+  { label: 'Predict', prompt: 'Semicolon placed right after the CTE\'s closing parenthesis — result?', options: [opt('Error / CTE is lost', true), opt('Works fine'), opt('CTE becomes permanent')], why: 'The semicolon ends the statement early — WITH and the final SELECT must be one statement.' },
+  { label: 'Predict', prompt: 'Top salesperson pipeline — who wins and with what?', options: [opt('Aditi, 1200.00', true), opt('Neha, 1100.00'), opt('Rahul, 500.00')], why: '500 + 700 = 1200 for Aditi beats Neha\'s 1100.' }
+]);
+
+// ============ MODULE 17: DATES & TIMES ============
+const dtEmployees = [
+  { emp_id: 1,  name: 'Aditi', joining_date: '2028-03-15', department: 'Engineering' },
+  { emp_id: 2,  name: 'Rohan', joining_date: '2028-11-04', department: 'Support' },
+  { emp_id: 3,  name: 'Kiran', joining_date: '2029-03-22', department: 'Engineering' },
+  { emp_id: 4,  name: 'Neha',  joining_date: '2028-02-29', department: 'HR' },
+  { emp_id: 5,  name: 'Arjun', joining_date: null,         department: 'Engineering' },
+  { emp_id: 6,  name: 'Farah', joining_date: '2028-01-01', department: 'Product' },
+  { emp_id: 7,  name: 'Ishan', joining_date: '2028-12-31', department: 'Support' },
+  { emp_id: 8,  name: 'Zoya',  joining_date: '2028-02-29', department: 'Engineering' },
+  { emp_id: 9,  name: 'Kabir', joining_date: '2028-12-01', department: 'Finance' },
+  { emp_id: 10, name: 'Tara',  joining_date: '2029-02-10', department: 'Support' }
+];
+const dtOrders = [
+  { order_id: 501, customer: 'Asha',   order_date: '2029-01-05', amount: '349.00',  status: 'PLACED' },
+  { order_id: 502, customer: 'Ravi',   order_date: '2029-01-18', amount: '1200.00', status: 'DELIVERED' },
+  { order_id: 503, customer: 'Meera',  order_date: '2029-02-02', amount: '799.00',  status: 'DELIVERED' },
+  { order_id: 504, customer: 'Asha',   order_date: '2028-12-30', amount: '499.00',  status: 'DELIVERED' },
+  { order_id: 505, customer: 'Dev',    order_date: '2029-02-10', amount: '50.00',   status: 'CANCELLED' },
+  { order_id: 506, customer: 'Isha',   order_date: '2028-02-29', amount: '999.00',  status: 'DELIVERED' },
+  { order_id: 507, customer: 'Kabir',  order_date: '2029-03-01', amount: '199.00',  status: 'PLACED' },
+  { order_id: 508, customer: 'Simran', order_date: '2029-03-15', amount: '299.00',  status: 'DELIVERED' },
+  { order_id: 509, customer: 'Nikhil', order_date: '2028-11-11', amount: '899.00',  status: 'DELIVERED' },
+  { order_id: 510, customer: 'Rohan',  order_date: '2029-04-23', amount: '149.00',  status: 'PLACED' },
+  { order_id: 511, customer: 'Meera',  order_date: '2029-05-01', amount: '399.00',  status: 'CANCELLED' },
+  { order_id: 512, customer: 'Asha',   order_date: '2029-02-28', amount: '129.00',  status: 'DELIVERED' }
+];
+const dtLogins = [
+  { login_id: 1,  user: 'Ashwin', login_time: '2029-01-15 09:00:00', device: 'android', ip: '10.0.0.1' },
+  { login_id: 2,  user: 'Ashwin', login_time: '2029-02-10 09:00:00', device: 'web',     ip: '10.0.0.2' },
+  { login_id: 3,  user: 'Simran', login_time: '2029-01-20 20:15:00', device: 'ios',     ip: '10.0.0.3' },
+  { login_id: 4,  user: 'Nikhil', login_time: '2029-02-10 00:00:00', device: 'web',     ip: '10.0.0.4' },
+  { login_id: 5,  user: 'Nikhil', login_time: '2029-02-10 00:00:00', device: 'web',     ip: '10.0.0.5' },
+  { login_id: 6,  user: 'Priya',  login_time: '2029-02-09 23:59:59', device: 'android', ip: '10.0.0.6' },
+  { login_id: 7,  user: 'Priya',  login_time: '2029-02-10 23:59:59', device: 'android', ip: '10.0.0.7' },
+  { login_id: 8,  user: 'Asha',   login_time: '2029-02-11 00:00:00', device: 'web',     ip: '10.0.0.8' },
+  { login_id: 9,  user: 'Isha',   login_time: '2029-01-31 10:30:00', device: 'web',     ip: '10.0.0.9' },
+  { login_id: 10, user: 'Isha',   login_time: '2029-02-01 10:30:00', device: 'web',     ip: '10.0.0.10' },
+  { login_id: 11, user: 'Dev',    login_time: '2029-02-10 15:45:00', device: 'ios',     ip: '10.0.0.11' },
+  { login_id: 12, user: 'Kabir',  login_time: '2029-02-05 08:00:00', device: 'web',     ip: '10.0.0.12' },
+  { login_id: 13, user: 'Meera',  login_time: '2029-02-10 09:00:00', device: 'android', ip: '10.0.0.13' }
+];
+const dtDeliveries = [
+  { order_id: 9001, order_placed_at: '2029-02-10 12:00:00', delivered_at: '2029-02-10 12:18:00' },
+  { order_id: 9002, order_placed_at: '2029-02-10 12:05:00', delivered_at: '2029-02-10 12:42:00' },
+  { order_id: 9003, order_placed_at: '2029-02-10 12:10:00', delivered_at: null },
+  { order_id: 9004, order_placed_at: '2029-02-10 12:20:00', delivered_at: '2029-02-10 12:10:00' },
+  { order_id: 9005, order_placed_at: '2029-02-10 13:00:00', delivered_at: '2029-02-10 13:31:00' },
+  { order_id: 9006, order_placed_at: '2029-02-10 14:00:00', delivered_at: '2029-02-10 14:30:00' },
+  { order_id: 9007, order_placed_at: '2029-02-09 23:55:00', delivered_at: '2029-02-10 00:25:00' },
+  { order_id: 9008, order_placed_at: '2029-02-10 23:59:00', delivered_at: '2029-02-11 00:10:00' },
+  { order_id: 9009, order_placed_at: '2029-02-11 12:00:00', delivered_at: '2029-02-11 12:20:00' },
+  { order_id: 9010, order_placed_at: '2029-02-08 12:00:00', delivered_at: '2029-02-08 12:05:00' }
+];
+const dtTickets = [
+  { ticket_id: 1001, customer: 'Isha',  opened_on: '2029-01-01', closed_on: '2029-01-05', status: 'CLOSED' },
+  { ticket_id: 1002, customer: 'Dev',   opened_on: '2029-01-10', closed_on: null,         status: 'OPEN' },
+  { ticket_id: 1003, customer: 'Asha',  opened_on: '2029-01-15', closed_on: '2029-01-16', status: 'CLOSED' },
+  { ticket_id: 1007, customer: 'Kabir', opened_on: '2029-02-05', closed_on: null,         status: 'OPEN' }
+];
+// ISO strings compare chronologically as plain strings; parse only for arithmetic
+const dtMs = s => new Date(s.replace(' ', 'T') + (s.length === 10 ? 'T00:00:00' : '')).getTime();
+const dtYear = d => d === null ? null : d.slice(0, 4); // string, so uCell won't render "2,029"
+const dtMonth = d => d === null ? null : Number(d.slice(5, 7));
+
+// source tables
+const dtEmpSrc = document.getElementById('dt-emp-src');
+if (dtEmpSrc) {
+  dtEmpSrc.innerHTML = uTable(dtEmployees, ['emp_id', 'name', 'joining_date', 'department']);
+  document.getElementById('dt-ord-src').innerHTML = uTable(dtOrders, ['order_id', 'customer', 'order_date', 'amount', 'status']);
+  document.getElementById('dt-log-src').innerHTML = uTable(dtLogins, ['login_id', 'user', 'login_time', 'device', 'ip']);
+}
+
+// --- extraction playground ---
+const dtExOut = document.getElementById('dt-ex-out');
+if (dtExOut) {
+  const res = document.getElementById('dt-ex-res');
+  const note = document.getElementById('dt-ex-note');
+  function runEx(mode) {
+    if (mode === 'date') {
+      dtExOut.textContent = `SET @date_temp = DATE('2029-08-19');\n\nSELECT\n  YEAR(@date_temp)  AS year,\n  MONTH(@date_temp) AS month,\n  DAY(@date_temp)   AS day;`;
+      res.innerHTML = uTable([{ year: '2029', month: 8, day: 19 }], ['year', 'month', 'day']);
+      note.innerHTML = 'YEAR → four-digit year, MONTH → 1–12, DAY → 1–31. No time part needed.';
+    } else if (mode === 'time') {
+      dtExOut.textContent = `SET @datetime_temp = TIMESTAMP('2029-05-18 12:50:45');\n\nSELECT\n  HOUR(@datetime_temp)   AS hour,\n  MINUTE(@datetime_temp) AS minute,\n  SECOND(@datetime_temp) AS second;`;
+      res.innerHTML = uTable([{ hour: 12, minute: 50, second: 45 }], ['hour', 'minute', 'second']);
+      note.innerHTML = 'HOUR → 0–23, MINUTE and SECOND → 0–59. These need a DATETIME/TIMESTAMP — on a date-only value HOUR() is just 0.';
+    } else {
+      dtExOut.textContent = `SELECT\n  EXTRACT(YEAR  FROM @date_temp) AS year,\n  EXTRACT(MONTH FROM @date_temp) AS month,\n  EXTRACT(DAY   FROM @date_temp) AS day;`;
+      res.innerHTML = uTable([{ year: '2029', month: 8, day: 19 }], ['year', 'month', 'day']);
+      note.innerHTML = 'Same answers, standard-SQL spelling: say <em>what</em> to extract, then <code>FROM</code> <em>which value</em>. Portable across MySQL, PostgreSQL and friends.';
+    }
+  }
+  sqSeg('dt-ex-seg', 'mode', runEx);
+  runEx('date');
+}
+
+// --- employee scenarios ---
+const dtEmpPick = document.getElementById('dt-emp-pick');
+if (dtEmpPick) {
+  const out = document.getElementById('dt-emp-out');
+  const res = document.getElementById('dt-emp-res');
+  const note = document.getElementById('dt-emp-note');
+  function runEmp() {
+    if (dtEmpPick.value === 'parts') {
+      out.textContent = `SELECT emp_id, name,\n       YEAR(joining_date)  AS join_year,\n       MONTH(joining_date) AS join_month\nFROM employees;`;
+      const rows = dtEmployees.map(e => ({
+        emp_id: e.emp_id, name: e.name,
+        join_year: dtYear(e.joining_date), join_month: dtMonth(e.joining_date)
+      }));
+      res.innerHTML = uTable(rows, ['emp_id', 'name', 'join_year', 'join_month']);
+      note.innerHTML = 'Arjun\'s NULL date extracts to NULL, not 0 — <code>YEAR(NULL)</code> is NULL.';
+    } else {
+      out.textContent = `SELECT MONTH(joining_date) AS join_month,\n       YEAR(joining_date)  AS join_year,\n       COUNT(*)            AS hires\nFROM employees\nGROUP BY YEAR(joining_date), MONTH(joining_date)\nORDER BY join_month, join_year;`;
+      const groups = {};
+      dtEmployees.forEach(e => {
+        const k = `${dtYear(e.joining_date)}|${dtMonth(e.joining_date)}`;
+        groups[k] = (groups[k] || 0) + 1;
+      });
+      const rows = Object.entries(groups).map(([k, hires]) => {
+        const [y, m] = k.split('|');
+        return { join_month: y === 'null' ? null : Number(m), join_year: y === 'null' ? null : y, hires };
+      }).sort((a, b) => {
+        if (a.join_month === null) return -1;
+        if (b.join_month === null) return 1;
+        return a.join_month - b.join_month || a.join_year.localeCompare(b.join_year);
+      });
+      res.innerHTML = uTable(rows, ['join_month', 'join_year', 'hires']);
+      note.innerHTML = 'Employees sharing a year+month collapse into one row. Arjun\'s NULL date forms its own (NULL, NULL) group — <code>COUNT(*)</code> still counts him.';
+    }
+  }
+  dtEmpPick.addEventListener('change', runEmp);
+  runEmp();
+}
+
+// --- date range playground ---
+const dtRangePick = document.getElementById('dt-range-pick');
+if (dtRangePick) {
+  const out = document.getElementById('dt-range-out');
+  const res = document.getElementById('dt-range-res');
+  const note = document.getElementById('dt-range-note');
+  function runRange() {
+    let rows;
+    if (dtRangePick.value === 'jan') {
+      out.textContent = `SELECT order_id, customer, order_date\nFROM orders\nWHERE order_date BETWEEN '2029-01-01'\n                     AND '2029-01-31';\n\n-- identical:\n-- WHERE order_date >= '2029-01-01'\n--   AND order_date <= '2029-01-31'`;
+      rows = dtOrders.filter(o => o.order_date >= '2029-01-01' && o.order_date <= '2029-01-31');
+      note.innerHTML = 'Both boundary days are <em>included</em>. Safe here because <code>order_date</code> is a pure DATE — no hidden time to lose.';
+    } else {
+      out.textContent = `SELECT order_id, customer, order_date\nFROM orders\nWHERE order_date >= '2029-01-01'\n  AND order_date <  '2029-04-01';   -- half-open [Jan 1, Apr 1)`;
+      rows = dtOrders.filter(o => o.order_date >= '2029-01-01' && o.order_date < '2029-04-01');
+      note.innerHTML = 'One pattern covers the whole quarter — no need to remember that February has 28 days. Just point at the 1st of the next period.';
+    }
+    res.innerHTML = uTable(rows.map(o => ({ order_id: o.order_id, customer: o.customer, order_date: o.order_date })),
+      ['order_id', 'customer', 'order_date']);
+  }
+  dtRangePick.addEventListener('change', runRange);
+  runRange();
+}
+
+// --- BETWEEN + DATETIME trap ---
+const dtTrapOut = document.getElementById('dt-trap-out');
+if (dtTrapOut) {
+  const res = document.getElementById('dt-trap-res');
+  const note = document.getElementById('dt-trap-note');
+  function runTrap(mode) {
+    const jan = dtLogins.filter(l => l.login_time >= '2029-01-01' && l.login_time < '2029-02-01');
+    let keep;
+    if (mode === 'between') {
+      dtTrapOut.textContent = `WHERE login_time BETWEEN '2029-01-01' AND '2029-01-31'\n\n-- silently becomes:\nWHERE login_time >= '2029-01-01 00:00:00'\n  AND login_time <= '2029-01-31 00:00:00'   -- ⚠ midnight!`;
+      keep = jan.filter(l => l.login_time <= '2029-01-31 00:00:00');
+      note.innerHTML = `<strong>${keep.length} of ${jan.length} January logins kept.</strong> Isha's <code>2029-01-31 10:30:00</code> is <em>gone</em> — everything after midnight on the 31st is excluded. This is the bug that makes daily report totals mysteriously not match.`;
+    } else if (mode === 'endofday') {
+      dtTrapOut.textContent = `WHERE login_time >= '2029-01-01 00:00:00'\n  AND login_time <= '2029-01-31 23:59:59'   -- ⚠ still risky`;
+      keep = jan.filter(l => l.login_time <= '2029-01-31 23:59:59');
+      note.innerHTML = `All ${jan.length} rows back — <em>on this data</em>. But a DATETIME(3) value like <code>23:59:59.500</code> would still slip through the crack. Works until it doesn't; not production-safe.`;
+    } else {
+      dtTrapOut.textContent = `WHERE login_time >= '2029-01-01 00:00:00'\n  AND login_time <  '2029-02-01 00:00:00'   -- ✅ [start, next_start)`;
+      keep = jan;
+      note.innerHTML = `All ${jan.length} January logins, guaranteed — any timestamp below Feb 1 midnight qualifies, fractional seconds included. Note Isha's <code>2029-02-01 10:30:00</code> correctly lands in February, not here.`;
+    }
+    res.innerHTML = uTable(keep.map(l => ({ login_id: l.login_id, user: l.user, login_time: l.login_time })),
+      ['login_id', 'user', 'login_time']);
+  }
+  sqSeg('dt-trap-seg', 'mode', runTrap);
+  runTrap('between');
+}
+
+// --- MIN / MAX playground ---
+const dtMmPick = document.getElementById('dt-mm-pick');
+if (dtMmPick) {
+  const out = document.getElementById('dt-mm-out');
+  const res = document.getElementById('dt-mm-res');
+  const note = document.getElementById('dt-mm-note');
+  const perUser = () => [...new Set(dtLogins.map(l => l.user))].map(u => {
+    const ts = dtLogins.filter(l => l.user === u).map(l => l.login_time).sort();
+    return { user: u, first_login: ts[0], latest_login: ts[ts.length - 1], total_logins: ts.length };
+  });
+  function runMm() {
+    const m = dtMmPick.value;
+    if (m === 'global') {
+      out.textContent = `SELECT MIN(login_time) AS system_start,\n       MAX(login_time) AS system_last_activity\nFROM logins;`;
+      const ts = dtLogins.map(l => l.login_time).sort();
+      res.innerHTML = uTable([{ system_start: ts[0], system_last_activity: ts[ts.length - 1] }],
+        ['system_start', 'system_last_activity']);
+      note.innerHTML = 'No GROUP BY — one row for the whole table. MIN = the oldest point on the timeline, MAX = the newest.';
+    } else if (m === 'peruser') {
+      out.textContent = 'SELECT `user`,\n       MIN(login_time) AS first_login,\n       MAX(login_time) AS latest_login\nFROM logins\nGROUP BY `user`\nORDER BY `user`;';
+      const rows = perUser().sort((a, b) => a.user.localeCompare(b.user))
+        .map(({ user, first_login, latest_login }) => ({ user, first_login, latest_login }));
+      res.innerHTML = uTable(rows, ['user', 'first_login', 'latest_login']);
+      note.innerHTML = 'GROUP BY splits the timeline per person. One-login users (Asha, Dev…) show the same value twice — their first login <em>is</em> their latest.';
+    } else if (m === 'engage') {
+      out.textContent = 'SELECT `user`,\n       MAX(login_time) AS latest_activity,\n       COUNT(*) AS total_logins\nFROM logins\nGROUP BY `user`\nORDER BY total_logins DESC;';
+      const rows = perUser().sort((a, b) => b.total_logins - a.total_logins)
+        .map(({ user, latest_login, total_logins }) => ({ user, latest_activity: latest_login, total_logins }));
+      res.innerHTML = uTable(rows, ['user', 'latest_activity', 'total_logins']);
+      note.innerHTML = 'Frequency + recency in one report: are the heavy users also the recent ones?';
+    } else if (m === 'android') {
+      out.textContent = `SELECT MAX(login_time) AS latest_android_login\nFROM logins\nWHERE device = 'android';`;
+      const ts = dtLogins.filter(l => l.device === 'android').map(l => l.login_time).sort();
+      res.innerHTML = uTable([{ latest_android_login: ts[ts.length - 1] }], ['latest_android_login']);
+      note.innerHTML = 'WHERE filters first, MAX runs on what\'s left — Priya\'s 23:59:59 login wins.';
+    } else {
+      out.textContent = `SELECT MIN(login_time) AS first_february_login\nFROM logins\nWHERE login_time >= '2029-02-01 00:00:00'\n  AND login_time <  '2029-03-01 00:00:00';`;
+      const ts = dtLogins.filter(l => l.login_time >= '2029-02-01' && l.login_time < '2029-03-01')
+        .map(l => l.login_time).sort();
+      res.innerHTML = uTable([{ first_february_login: ts[0] }], ['first_february_login']);
+      note.innerHTML = 'A half-open range narrows the timeline to February, then MIN finds its pioneer — Isha on Feb 1 at 10:30.';
+    }
+  }
+  dtMmPick.addEventListener('change', runMm);
+  runMm();
+}
+
+// --- DATEDIFF / TIMESTAMPDIFF ---
+const dtDiffPick = document.getElementById('dt-diff-pick');
+if (dtDiffPick) {
+  const out = document.getElementById('dt-diff-out');
+  const res = document.getElementById('dt-diff-res');
+  const note = document.getElementById('dt-diff-note');
+  function runDiff() {
+    const m = dtDiffPick.value;
+    if (m === 'days') {
+      out.textContent = `SET @date_1 = '2029-01-10';\nSET @date_2 = '2029-07-19';\n\nSELECT DATEDIFF(@date_2, @date_1) AS days_diff;`;
+      const days = Math.round((dtMs('2029-07-19') - dtMs('2029-01-10')) / 86400000);
+      res.innerHTML = uTable([{ days_diff: days }], ['days_diff']);
+      note.innerHTML = '<code>DATEDIFF(end, start)</code> — always whole days, and it only looks at the date portion. Even on timestamps, the times are ignored.';
+    } else if (m === 'hours') {
+      out.textContent = `SET @ts_1 = TIMESTAMP('2029-01-10 19:07:10');\nSET @ts_2 = TIMESTAMP('2029-01-11 12:07:10');\n\nSELECT TIMESTAMPDIFF(HOUR, @ts_1, @ts_2) AS hours_diff;`;
+      const hours = Math.floor((dtMs('2029-01-11 12:07:10') - dtMs('2029-01-10 19:07:10')) / 3600000);
+      res.innerHTML = uTable([{ hours_diff: hours }], ['hours_diff']);
+      note.innerHTML = '<code>TIMESTAMPDIFF(unit, start, end)</code> — note the <em>reversed</em> argument order vs DATEDIFF! It counts complete units only: 1h 59m is still 1; 59m 59s is 0 hours. Need precision? Count minutes and divide by 60 yourself.';
+    } else if (m === 'resolve') {
+      out.textContent = `SELECT ticket_id, customer,\n       DATEDIFF(closed_on, opened_on) AS days_to_resolve\nFROM support_tickets\nWHERE status = 'CLOSED';`;
+      const rows = dtTickets.filter(t => t.status === 'CLOSED').map(t => ({
+        ticket_id: String(t.ticket_id), customer: t.customer,
+        days_to_resolve: Math.round((dtMs(t.closed_on) - dtMs(t.opened_on)) / 86400000)
+      }));
+      res.innerHTML = uTable(rows, ['ticket_id', 'customer', 'days_to_resolve']);
+      note.innerHTML = 'Calendar days from open to close — the classic SLA metric. If either date were NULL, the whole result would be NULL, which is why we filter to CLOSED first.';
+    } else if (m === 'overdue') {
+      out.textContent = `-- CURRENT_DATE = '2029-02-10'\nSELECT ticket_id, customer, opened_on\nFROM support_tickets\nWHERE status = 'OPEN'\n  AND opened_on < CURRENT_DATE;`;
+      const rows = dtTickets.filter(t => t.status === 'OPEN' && t.opened_on < '2029-02-10')
+        .map(t => ({ ticket_id: String(t.ticket_id), customer: t.customer, opened_on: t.opened_on }));
+      res.innerHTML = uTable(rows, ['ticket_id', 'customer', 'opened_on']);
+      note.innerHTML = 'Anything still OPEN from before today is backlog. Because it uses <code>CURRENT_DATE</code>, this query is <em>live</em> — run it tomorrow and today\'s new tickets join the list.';
+    } else if (m === 'week') {
+      out.textContent = `-- CURRENT_DATE = '2029-02-10'\nSELECT ticket_id, customer, opened_on\nFROM support_tickets\nWHERE opened_on >= DATE_SUB(CURRENT_DATE, INTERVAL 7 DAY);`;
+      const rows = dtTickets.filter(t => t.opened_on >= '2029-02-03')
+        .map(t => ({ ticket_id: String(t.ticket_id), customer: t.customer, opened_on: t.opened_on }));
+      res.innerHTML = uTable(rows, ['ticket_id', 'customer', 'opened_on']);
+      note.innerHTML = '<code>DATE_SUB(CURRENT_DATE, INTERVAL 7 DAY)</code> builds a moving 7-day window — the marketing "new signups" pattern. Only Kabir\'s Feb 5 ticket falls inside [Feb 3, today].';
+    } else {
+      out.textContent = `-- CURRENT_DATE = '2029-02-10'\nSELECT login_id, \`user\`, login_time\nFROM logins\nWHERE login_time >= TIMESTAMP(CURRENT_DATE, '00:00:00')\n  AND login_time <  TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00')\nORDER BY login_time, login_id;`;
+      const rows = dtLogins.filter(l => l.login_time >= '2029-02-10 00:00:00' && l.login_time < '2029-02-11 00:00:00')
+        .sort((a, b) => a.login_time.localeCompare(b.login_time) || a.login_id - b.login_id)
+        .map(l => ({ login_id: l.login_id, user: l.user, login_time: l.login_time }));
+      res.innerHTML = uTable(rows, ['login_id', 'user', 'login_time']);
+      note.innerHTML = '"Today" is just a half-open interval built from <code>CURRENT_DATE</code>. Nikhil at exactly midnight is in; Asha at Feb 11 00:00:00 is the <em>next</em> day\'s first second — excluded.';
+    }
+  }
+  dtDiffPick.addEventListener('change', runDiff);
+  runDiff();
+}
+
+// --- delivery latency table ---
+const dtDelRes = document.getElementById('dt-del-res');
+if (dtDelRes) {
+  const rows = dtDeliveries.map(d => {
+    let minutes = null, status;
+    if (d.delivered_at === null) status = 'Pending';
+    else {
+      const secs = Math.floor((dtMs(d.delivered_at) - dtMs(d.order_placed_at)) / 1000);
+      minutes = Math.trunc(secs / 60);
+      status = secs < 0 ? 'Bad Data' : (secs <= 60 * 30 ? 'On Time' : 'Slow');
+    }
+    return { order_id: String(d.order_id), order_placed_at: d.order_placed_at, delivered_at: d.delivered_at, delivery_minutes: minutes, delivery_status: status };
+  });
+  dtDelRes.innerHTML = uTable(rows, ['order_id', 'order_placed_at', 'delivered_at', 'delivery_minutes', 'delivery_status']);
+}
+
+// --- games ---
+buildClassify('dt-tool', 'dt-tool-score', [
+  { label: 'Goal', prompt: 'Get the month number out of a joining_date for a report column', options: [opt('MONTH()', true), opt('DATEDIFF()'), opt('BETWEEN')], why: 'Extraction in the SELECT list is exactly what MONTH()/YEAR()/DAY() are for.' },
+  { label: 'Goal', prompt: 'Filter a DATETIME column to all of January — production-safe', options: [opt(">= '01-01' AND < '02-01'", true), opt("BETWEEN '01-01' AND '01-31'"), opt('YEAR() = … AND MONTH() = …')], why: 'The half-open interval catches every timestamp and keeps the index usable.' },
+  { label: 'Goal', prompt: 'Each user\'s most recent activity', options: [opt('MAX(login_time) + GROUP BY', true), opt('MIN(login_time) + GROUP BY'), opt('COUNT(*)')], why: 'Newest = largest date value → MAX per group.' },
+  { label: 'Goal', prompt: 'Whole days a support ticket has been open', options: [opt('DATEDIFF(CURRENT_DATE, opened_on)', true), opt('TIMESTAMPDIFF(SECOND, …)'), opt('MONTH(opened_on)')], why: 'DATEDIFF answers in days, ignoring times — perfect for age-in-days.' },
+  { label: 'Goal', prompt: 'Delivery time in minutes between two timestamps', options: [opt('TIMESTAMPDIFF(MINUTE, placed, delivered)', true), opt('DATEDIFF(delivered, placed)'), opt('MINUTE(delivered)')], why: 'Unit-based difference over full timestamps → TIMESTAMPDIFF. DATEDIFF would say 0 for a same-day delivery.' },
+  { label: 'Pick', prompt: 'WHERE YEAR(order_date) = 2029 is slow because…', options: [opt('the function hides the column from the index', true), opt('YEAR() is a slow function'), opt('2029 is a large number')], why: 'Wrapping the column makes the predicate non-SARGable — the engine must compute YEAR() for every row.' }
+]);
+
+buildClassify('dt-predict', 'dt-predict-score', [
+  { label: 'Predict', prompt: 'YEAR(NULL) returns…', code: true, options: [opt('NULL', true), opt('0'), opt('An error')], why: 'Extraction on NULL yields NULL — Arjun shows NULL, NULL, not zeros.' },
+  { label: 'Predict', prompt: "login_time BETWEEN '2029-01-01' AND '2029-01-31' — is Isha's Jan 31 10:30 login included?", options: [opt('No — the range ends at midnight on the 31st', true), opt('Yes — the 31st is inclusive'), opt('Error: types don\'t match')], why: "'2029-01-31' becomes '2029-01-31 00:00:00'; only the first second of the day is inside." },
+  { label: 'Predict', prompt: 'MIN(login_time) per user for Asha, who logged in once — first vs latest?', options: [opt('Identical values', true), opt('Latest is NULL'), opt('First is NULL')], why: 'With one row in the group, MIN and MAX are the same timestamp.' },
+  { label: 'Predict', prompt: "DATEDIFF('2029-07-19', '2029-01-10') = ?", code: true, options: [opt('190', true), opt('-190'), opt('6')], why: 'End minus start in whole days: 190. Swapped arguments would give -190.' },
+  { label: 'Predict', prompt: 'TIMESTAMPDIFF(HOUR, 10:00:00, 11:59:00) same day = ?', code: true, options: [opt('1', true), opt('2'), opt('1.98')], why: 'Only complete hours count — 1h 59m is still just 1 whole hour.' },
+  { label: 'Predict', prompt: 'Order 9007: placed 23:55, delivered 00:25 next day — delivery_minutes?', options: [opt('30 — On Time', true), opt('-1410 — Bad Data'), opt('NULL — Pending')], why: 'Timestamps carry the full date, so crossing midnight is just 30 ordinary minutes.' }
+]);
